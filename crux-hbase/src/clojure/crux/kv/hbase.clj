@@ -1,6 +1,7 @@
 (ns crux.kv.hbase
   (:require [crux.kv]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.memory :as mem])
   (:import (org.apache.hadoop.hbase TableName)
            (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan)
            (java.io Closeable)
@@ -9,14 +10,14 @@
 
 (defn- iterator->key [^io.kosong.crux.hbase.HBaseKvIterator i]
   (when (.isValid i)
-    (.key i)))
+    (mem/->off-heap (.key i))))
 ;;
 ;; KvIterator
 ;;
 (defrecord HBaseKvIterator [^io.kosong.crux.hbase.HBaseKvIterator i]
   kv/KvIterator
   (seek [_ k]
-    (.seek i k)
+    (.seek i (mem/->on-heap k))
     (iterator->key i))
 
   (next [_]
@@ -28,7 +29,7 @@
     (iterator->key i))
 
   (value [_]
-    (.value i))
+    (mem/->off-heap (.value i)))
 
   Closeable
   (close [_]
@@ -44,10 +45,11 @@
       (->HBaseKvIterator i)))
 
   (get-value [_ k]
-    (let [g         (Get. k)
+    (let [g         (Get. (mem/->on-heap k))
           ^Result r (.get table g)]
       (some-> r
-              (.getValue family qualifier))))
+              (.getValue family qualifier)
+              (mem/->off-heap))))
 
   Closeable
   (close [_]
@@ -78,8 +80,8 @@
   (store [{:keys [family qualifier table]} kvs]
     (let [puts (LinkedList.)]
       (doseq [[k v] kvs]
-        (.add puts (doto (Put. k)
-                     (.addColumn family qualifier v))))
+        (.add puts (doto (Put. (mem/->on-heap k))
+                     (.addColumn family qualifier (mem/->on-heap v)))))
       (.put table puts)))
 
   (new-snapshot [{:keys [table family qualifier]}]
@@ -90,7 +92,7 @@
   (delete [{:keys [table]} ks]
     (let [deletes (LinkedList.)]
       (doseq [k ks]
-        (.add deletes (Delete. k)))
+        (.add deletes (Delete. (mem/->on-heap k))))
       (.delete table deletes)))
 
   (fsync [_]

@@ -55,10 +55,9 @@
     (object-store/->CachedObjectStore cache object-store)))
 
 (defn- start-tx-log-consumer [{:keys [crux.hbase/tx-log-kv crux.node/indexer]} _]
-  (when tx-log-kv
-    (p/start-event-log-consumer indexer
-                                (moberg/map->MobergEventLogConsumer {:event-log-kv tx-log-kv
-                                                                     :batch-size   100}))))
+  (p/start-event-log-consumer indexer
+                              (moberg/map->MobergEventLogConsumer {:event-log-kv tx-log-kv
+                                                                   :batch-size   100})))
 
 (def ^:private lru-options
   {:crux.lru/query-cache-size
