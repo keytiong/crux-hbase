@@ -53,23 +53,23 @@
     (.setTickTime zookeeper-tick-time)
     (.startup (io/file zookeeper-data-dir))))
 
-(defn- hbase-conf [options]
+(defn- hbase-conf [kvs]
   (let [conf (HBaseConfiguration/create)]
-    (doseq [[^String k ^String v] (::hbase-config options)]
+    (doseq [[^String k ^String v] kvs]
       (.set conf k v))
     conf))
 
-(defn- start-hbase-cluster ^LocalHBaseCluster [zk-cluster {m ::hbase-config}]
-  (let [conf          (hbase-conf m)
-        masters       1
-        regionservers 1
-        hbase-cluster (LocalHBaseCluster. conf masters regionservers HMasterCommandLine$LocalHMaster HRegionServer)]
-    (DefaultMetricsSystem/setMiniClusterMode true)
-    (doto hbase-cluster
-      (.startup))))
+(defn- start-hbase-cluster ^LocalHBaseCluster [{kvs ::hbase-config}]
+  (DefaultMetricsSystem/setMiniClusterMode true)
+  (doto (LocalHBaseCluster. (hbase-conf kvs)
+                            1
+                            1
+                            HMasterCommandLine$LocalHMaster
+                            HRegionServer)
+    (.startup)))
 
 (defn start-embedded-hbase ^Closeable [options]
   (s/assert ::options options)
   (let [zk-cluster    (start-zookeeper-cluster options)
-        hbase-cluster (start-hbase-cluster zk-cluster options)]
+        hbase-cluster (start-hbase-cluster options)]
     (->EmbeddedHBase zk-cluster hbase-cluster)))

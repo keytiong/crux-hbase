@@ -9,7 +9,9 @@
 
 (def embedded-hbase-conf
   {:crux.hbase.embedded/zookeeper-data-dir "zk-data-dir"
-   :crux.hbase.embedded/hbase-data-dir     "hbase-data-dir"})
+   :crux.hbase.embedded/hbase-data-dir     "hbase-data-dir"
+   :crux.hbase.embedded/hbase-config {"hbase.tmp.dir" "./hbase-tmp"
+                                      "hbase.rootdir" "./hbase"}})
 
 (def embedded-hbase nil)
 
