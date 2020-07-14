@@ -7,8 +7,8 @@
   :profiles {:dev {:source-path  "dev"
                    :dependencies [[nrepl "0.6.0"]]}}
 
-  :modules {:versions {:hbase              "2.2.2"
-                       :crux               "19.09-1.5.0-alpha"
+  :modules {:versions {:hbase              "2.2.5"
+                       :crux               "20.07-1.9.2-beta"
                        org.apache.hbase    :hbase
                        org.clojure/clojure "1.10.1"
                        juxt/crux-core      :crux}})
