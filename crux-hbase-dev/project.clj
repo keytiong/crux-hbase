@@ -5,5 +5,7 @@
                  [io.kosong.crux/crux-hbase-embedded :version]
                  [juxt/crux-core]
                  [juxt/crux-rocksdb :crux]
-                 [juxt/crux-kafka :crux]]
+                 [juxt/crux-kafka :crux]
+                 [integrant "0.8.0"]
+                 [integrant/repl "0.3.1"]]
   :profiles {:dev {:source-paths ["dev"]}})

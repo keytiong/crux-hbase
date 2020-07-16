@@ -1,11 +1,15 @@
 (ns crux.kv.hbase
-  (:require [crux.kv]
-            [crux.kv :as kv]
-            [crux.memory :as mem])
+  (:require  [crux.node :as n]
+             [crux.kv :as kv]
+             [crux.memory :as mem])
   (:import (org.apache.hadoop.hbase TableName)
            (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan Connection)
            (java.io Closeable)
            (java.util LinkedList)
+           (org.apache.hadoop.hbase.util Bytes)
+           (org.apache.hadoop.hbase.client ConnectionFactory)
+           (org.apache.hadoop.hbase HBaseConfiguration TableName)
+           (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.hbase.util Bytes)))
 
 (defn- iterator->key [^io.kosong.crux.hbase.HBaseKvIterator i]
@@ -105,3 +109,47 @@
   Closeable
   (close [{:keys [table]}]
     (.close table)))
+
+
+(defn- start-index-kv [_
+                       {:keys [::namespace
+                               ::index-table
+                               ::index-family
+                               ::index-qualifier]
+                        :as   options}]
+  (let [conn (let [c (doto (Configuration.)
+                       (.set "hbase.rootdir" "./hbase"))]
+               (-> (HBaseConfiguration/create c)
+                   (ConnectionFactory/createConnection)))
+        table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
+                                      ^bytes (Bytes/toBytesBinary index-table))
+        table      (.getTable conn table-name)
+        family (Bytes/toBytesBinary index-family)
+        qualifier (Bytes/toBytesBinary index-qualifier)
+        kv (crux.kv.hbase/->HBaseKvStore conn table family qualifier)]
+    kv))
+
+(def ^:private hbase-options
+  {::family
+   {:doc              "HBase column family name"
+    :default          "crux"
+    :crux.config/type :crux.config/string}
+   ::namespace
+   {:doc              "HBase namespace"
+    :default          "default"
+    :crux.config/type :crux.config/string}
+   ::qualifier
+   {:doc              "HBase column qualifier name"
+    :default          "val"
+    :crux.config/type :crux.config/string}})
+
+
+(def kv
+  {:start-fn start-index-kv
+   :args     (merge hbase-options
+                    {:crux.hbase/index-table
+                     {:doc              "Index table name"
+                      :default          "index"
+                      :crux.config/type :crux.config/string}})})
+
+(def kv-store {:crux.node/kv-store kv})

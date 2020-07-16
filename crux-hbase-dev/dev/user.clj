@@ -1,45 +1,29 @@
 (ns user
   (:require [crux.hbase.embedded]
             [crux.hbase]
-            [crux.api :as crux])
+            [crux.api :as crux]
+            [integrant.core :as i]
+            [integrant.repl.state :refer [system]]
+            [integrant.repl :as ir :refer [clear go suspend resume halt reset reset-all]])
   (:import (crux.api ICruxAPI)
            (org.apache.hadoop.hbase.client ConnectionFactory TableDescriptorBuilder ColumnFamilyDescriptorBuilder)
-           (org.apache.hadoop.hbase HBaseConfiguration NamespaceDescriptor TableName)
+           (org.apache.hadoop.hbase HBaseConfiguration NamespaceDescriptor TableName NamespaceExistException)
            (org.apache.hadoop.hbase.util Bytes)))
-
-(def embedded-hbase-conf
-  {:crux.hbase.embedded/zookeeper-data-dir "zk-data-dir"
-   :crux.hbase.embedded/hbase-data-dir     "hbase-data-dir"
-   :crux.hbase.embedded/hbase-config {"hbase.tmp.dir" "./hbase-tmp"
-                                      "hbase.rootdir" "./hbase"}})
-
-(def embedded-hbase nil)
-
-(defn start-embedded-hbase
-  ([]
-   (start-embedded-hbase embedded-hbase-conf))
-  ([options]
-   (alter-var-root #'embedded-hbase
-                   (fn [_]
-                     (crux.hbase.embedded/start-embedded-hbase options)))))
-
-(defn stop-embedded-hbase []
-  (when embedded-hbase
-    (.close embedded-hbase)
-    (alter-var-root #'embedded-hbase (constantly nil))))
 
 (defn open-connection []
   (-> (HBaseConfiguration/create)
       (ConnectionFactory/createConnection)))
 
-(defn create-namespace [conn ns]
+(defn ensure-namespace [conn ns]
   (let [ns-descriptor (-> ns
                           (NamespaceDescriptor/create)
                           (.build))
         admin         (.getAdmin conn)]
-    (.createNamespace admin ns-descriptor)))
+    (try
+      (.createNamespace admin ns-descriptor)
+      (catch NamespaceExistException e))))
 
-(defn create-table [conn ^String ns ^String table ^String family]
+(defn ensure-table [conn ^String ns ^String table ^String family]
   (let [table-name       (TableName/valueOf (Bytes/toBytesBinary ns)
                                             (Bytes/toBytesBinary table))
         cf               (-> (ColumnFamilyDescriptorBuilder/newBuilder (Bytes/toBytesBinary family))
@@ -48,25 +32,46 @@
                              (.addColumnFamily cf)
                              (.build))
         admin            (.getAdmin conn)]
-    (.createTable admin table-descriptor)))
+    (when-not (.tableExists admin table-name)
+      (.createTable admin table-descriptor))))
 
-(defn ^ICruxAPI start-node []
-  (crux/start-node {:crux.node/topology   :crux.hbase/topology
-                    :crux.hbase/namespace "basilia"}))
+(defn- prep-hbase [ns table family]
+  (let [conn (open-connection)]
+    (try
+      (do
+        (ensure-namespace conn ns)
+        (ensure-table conn ns table family))
+      (finally (.close conn)))))
 
-(defn ^ICruxAPI start-standalone-node []
-  (crux/start-node
-    {:crux.node/topology                 :crux.standalone/topology
-     :crux.node/kv-store                 "crux.kv.memdb/kv"
-     :crux.standalone/event-log-dir      "data/eventlog-1"
-     :crux.kv/db-dir                     "data/db-dir"
-     :crux.standalone/event-log-kv-store "crux.kv.memdb/kv"}))
+(defmethod i/init-key :node [_ node-opts]
+  (crux/start-node node-opts))
 
-(defn ^ICruxAPI start-hbase-node []
-  (crux/start-node
-    {:crux.node/topology      :crux.hbase/topology
-     :crux.hbase/index-table  "index"
-     :crux.hbase/namespace    "basilia"
-     :crux.hbase/tx-log-table "txlog"
-     :crux.hbase/object-table "object"
-     :crux.kv/check-and-store-index-version true}))
+(defmethod i/halt-key! :node [_ ^ICruxAPI node]
+  (.close node))
+
+(defmethod i/init-key :embedded-hbase [_ hbase-opts]
+  (let [hbase (crux.hbase.embedded/start-embedded-hbase hbase-opts)]
+    (prep-hbase "default" "index" "crux")
+    hbase))
+
+(defmethod i/halt-key! :embedded-hbase [_ hbase]
+  (.close hbase))
+
+(def config
+  {:embedded-hbase {:crux.hbase.embedded/zookeeper-data-dir "zk-data-dir"
+                    :crux.hbase.embedded/hbase-data-dir     "hbase-data-dir"
+                    :crux.hbase.embedded/hbase-config       {"hbase.tmp.dir" "./hbase-tmp"
+                                                             "hbase.rootdir" "./hbase"}}
+
+   :node           {:crux.node/topology                    ['crux.standalone/topology
+                                                            'crux.kv.hbase/kv-store]
+                    :crux.kv.hbase/index-table             "index"
+                    :crux.kv.hbase/namespace               "default"
+                    :crux.kv.hbase/index-family            "crux"
+                    :crux.kv.hbase/index-qualifier         "val"
+                    :crux.kv/check-and-store-index-version true}})
+
+(ir/set-prep! (fn [] config))
+
+(defn crux-node []
+  (:node system))
