@@ -1,13 +1,15 @@
-(ns crux.hbase.embedded
+(ns io.kosong.crux.hbase.embedded
   (:require [clojure.java.io :as io]
             [crux.io]
             [clojure.spec.alpha :as s])
-  (:import (org.apache.hadoop.hbase HBaseConfiguration LocalHBaseCluster)
+  (:import (org.apache.hadoop.hbase HBaseConfiguration LocalHBaseCluster TableName NamespaceDescriptor NamespaceExistException)
+           (org.apache.hadoop.hbase.util Bytes)
            (org.apache.hadoop.hbase.zookeeper MiniZooKeeperCluster)
            (java.io Closeable)
            (org.apache.hadoop.hbase.regionserver HRegionServer)
            (org.apache.hadoop.hbase.master HMasterCommandLine$LocalHMaster)
-           (org.apache.hadoop.metrics2.lib DefaultMetricsSystem)))
+           (org.apache.hadoop.metrics2.lib DefaultMetricsSystem)
+           (org.apache.hadoop.hbase.client TableDescriptorBuilder ColumnFamilyDescriptorBuilder)))
 ;; Based on
 ;; https://github.com/apache/hbase/blob/master/hbase-server/src/main/java/org/apache/hadoop/hbase/master/HMasterCommandLine.java
 
@@ -73,3 +75,37 @@
   (let [zk-cluster    (start-zookeeper-cluster options)
         hbase-cluster (start-hbase-cluster options)]
     (->EmbeddedHBase zk-cluster hbase-cluster)))
+
+(defn ensure-namespace [conn ns]
+  (let [ns-descriptor (-> ns
+                          (NamespaceDescriptor/create)
+                          (.build))
+        admin         (.getAdmin conn)]
+    (try
+      (.createNamespace admin ns-descriptor)
+      (catch NamespaceExistException e))))
+
+(defn ensure-table [conn ^String ns ^String table ^String family]
+  (ensure-namespace conn ns)
+  (let [table-name       (TableName/valueOf (Bytes/toBytesBinary ns)
+                                            (Bytes/toBytesBinary table))
+        cf               (-> (ColumnFamilyDescriptorBuilder/newBuilder (Bytes/toBytesBinary family))
+                             (.build))
+        table-descriptor (-> (TableDescriptorBuilder/newBuilder table-name)
+                             (.addColumnFamily cf)
+                             (.build))
+        admin            (.getAdmin conn)]
+    (when-not (.tableExists admin table-name)
+      (.createTable admin table-descriptor))))
+
+(defn create-table [conn ns table family]
+  (ensure-namespace conn ns)
+  (ensure-table conn ns table family))
+
+(defn delete-table [conn ^String ns ^String table]
+  (let [admin (.getAdmin conn)
+        table-name (TableName/valueOf (Bytes/toBytesBinary ns)
+                                      (Bytes/toBytesBinary table))]
+    (when (.tableExists admin table-name)
+      (.disableTable admin table-name)
+      (.deleteTable admin table-name))))
