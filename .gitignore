@@ -5,8 +5,8 @@ pom.xml.asc
 *.iml
 /lib/
 /classes/
-/target/
-/checkouts/
+target/
+checkouts/
 .idea/
 .lein-deps-sum
 .lein-repl-history
@@ -14,3 +14,5 @@ pom.xml.asc
 .lein-failures
 .nrepl-port
 .cpcache/
+data/
+/crux-hbase-test/target/

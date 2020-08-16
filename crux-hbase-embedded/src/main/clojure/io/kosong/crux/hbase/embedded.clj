@@ -37,11 +37,9 @@
 (s/def ::zookeeper-data-dir string?)
 (s/def ::zookeeper-port :crux.io/port)
 (s/def ::zookeeper-tick-time int?)
-(s/def ::hbase-data-dir string?)
 (s/def ::hbase-config (s/map-of string? string?))
 
-(s/def ::options (s/keys :req [::zookeeper-data-dir
-                               ::hbase-data-dir]
+(s/def ::options (s/keys :req [::zookeeper-data-dir]
                          :opt [::zookeeper-port
                                ::zookeeper-tick-time
                                ::hbase-config]))
