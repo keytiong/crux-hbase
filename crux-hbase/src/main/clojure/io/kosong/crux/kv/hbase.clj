@@ -1,11 +1,11 @@
 (ns io.kosong.crux.kv.hbase
-  (:require [crux.node :as n]
-            [crux.kv :as kv]
+  (:require [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.lru :as lru]
             [crux.document-store :as ds]
-            [crux.standalone :as standalone])
-  (:import (org.apache.hadoop.hbase TableName)
+            [crux.system :as sys])
+  (:import (io.kosong.crux.hbase HBaseKvIteratorImpl)
+           (org.apache.hadoop.hbase TableName)
            (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan Connection)
            (java.io Closeable)
            (java.util LinkedList)
@@ -38,13 +38,13 @@
     (when-not (.tableExists admin table-name)
       (.createTable admin table-descriptor))))
 
-(defn- iterator->key [^io.kosong.crux.hbase.HBaseKvIterator i]
+(defn- iterator->key [^io.kosong.crux.hbase.HBaseKvIteratorImpl i]
   (when (.isValid i)
     (mem/->off-heap (.key i))))
 ;;
 ;; KvIterator
 ;;
-(defrecord HBaseKvIterator [^io.kosong.crux.hbase.HBaseKvIterator i]
+(defrecord HBaseKvIterator [^io.kosong.crux.hbase.HBaseKvIteratorImpl i]
   kv/KvIterator
   (seek [_ k]
     (.seek i (mem/->on-heap k))
@@ -71,7 +71,7 @@
 (defrecord HBaseKvSnapshot [^Table table family qualifier]
   kv/KvSnapshot
   (new-iterator [_]
-    (let [i (io.kosong.crux.hbase.HBaseKvIterator. table family qualifier)]
+    (let [i (HBaseKvIteratorImpl. table family qualifier)]
       (->HBaseKvIterator i)))
 
   (get-value [_ k]
@@ -119,9 +119,6 @@
   (fsync [this]
     nil)
 
-  (backup [this _]
-    nil)
-
   (compact [this]
     nil)
 
@@ -137,9 +134,11 @@
 
   Closeable
   (close [this]
-    (.close table)))
+    (.close table)
+    (when connection
+      (.close connection))))
 
-(defn- start-hbase-connection [_ {:keys [::hbase-config]}]
+(defn- start-hbase-connection [hbase-config]
   (let [hadoop-conf (reduce-kv (fn [conf k v]
                                  (doto conf (.set k v)))
                                (Configuration.)
@@ -162,38 +161,6 @@
                                ::family
                                ::qualifier]}]
   (start-hbase-kv connection namespace kv-store-table family qualifier))
-
-(defn- start-event-log-kv-store [{:keys [::connection]}
-                                 {:keys [::namespace
-                                         ::event-log-kv-store-table
-                                         ::family
-                                         ::qualifier]}]
-  (start-hbase-kv connection namespace event-log-kv-store-table family qualifier))
-
-(defn- start-document-store [{:keys [::connection]}
-                             {:keys [::namespace
-                                     ::document-store-table
-                                     ::family
-                                     ::qualifier
-                                     :crux.document-store/doc-cache-size]}]
-  (let [kv-store  (start-hbase-kv connection namespace document-store-table family qualifier)
-        cache     (lru/new-cache doc-cache-size)
-        doc-store (ds/->KvDocumentStore kv-store)]
-    (ds/->CachedDocumentStore cache doc-store)))
-
-(defn- start-event-log-document-store [{:keys [::connection]}
-                                       {:keys [::namespace
-                                               ::event-log-document-store-table
-                                               ::family
-                                               ::qualifier
-                                               :crux.document-store/doc-cache-size]}]
-  (let [kv-store (start-hbase-kv connection namespace event-log-document-store-table family qualifier)
-        cache (lru/new-cache doc-cache-size)
-        doc-store (ds/->KvDocumentStore kv-store)]
-    (ds/->CachedDocumentStore cache doc-store)))
-
-(defn- start-event-log [{:keys [::event-log-kv-store ::event-log-document-store]} _]
-  (standalone/->EventLog event-log-kv-store event-log-document-store))
 
 (def hbase-client-options
   {::hbase-client-config
@@ -229,33 +196,23 @@
                       :default          "kv-store"
                       :crux.config/type :crux.config/string}})})
 
-(def event-log-kv-store
-  {:start-fn start-event-log-kv-store
-   :deps     [::connection]
-   :args     (merge default-options
-                    {::event-log-kv-store-table
-                     {:doc              "Event log KV store table name"
-                      :default          "event-log-kv-store"
-                      :crux.config/type :crux.config/string}})})
 
-(def event-log-document-store
-  {:start-fn start-event-log-document-store
-   :deps     [::connection]
-   :args     (merge default-options
-                    {::event-log-document-store-table
-                     {:doc              "HBase event log document store table name"
-                      :default          "event-log-document-store"
-                      :crux.config/type :crux.config/string}}
-                    {:doc/doc-cache-size ds/doc-cache-size-opt})})
-
-(def event-log
-  {:start-fn start-event-log
-   :deps     [::event-log-kv-store ::event-log-document-store]})
-
-(def topology
-  (merge standalone/topology
-         {::n/kv-store               kv-store
-          ::event-log-kv-store       event-log-kv-store
-          ::event-log-document-store event-log-document-store
-          :crux.standalone/event-log event-log
-          ::connection               connection}))
+(defn ->kv-store {::sys/deps {:metrics (fn [_])}
+                  ::sys/args {:table         {:doc       "Table name"
+                                              :required? true
+                                              :spec      ::sys/string}
+                              :family        {:doc     "Column family name"
+                                              :default "cf"
+                                              :spec    ::sys/string}
+                              :namespace     {:doc     "Hbase namespace"
+                                              :default "crux"
+                                              :spec    ::sys/string}
+                              :qualifier     {:doc     "Hbase column qualifier"
+                                              :default "val"
+                                              :spec    ::sys/string}
+                              :client-config {:doc     "Hbase client configuration"
+                                              :default {}
+                                              :spec    ::sys/string-map}}}
+  [{:keys [table family namespace metrics qualifier client-config] :as options}]
+  (let [connection (start-hbase-connection client-config)]
+    (start-hbase-kv connection namespace table family qualifier)))

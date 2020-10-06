@@ -49,12 +49,12 @@
   (with-open [conn (-> (HBaseConfiguration/create)
                        (ConnectionFactory/createConnection))]
     (hbase-embedded/create-table conn "crux" "kv-test" "cf")
-    (try
-      (with-open [kv (start-hbase-kv conn "crux" "kv-test" "cf" "val")]
+    (let [kv (start-hbase-kv conn "crux" "kv-test" "cf" "val")]
+      (try
         (binding [*kv* kv]
-          (f)))
-      (finally
-        (hbase-embedded/delete-table conn "crux" "kv-test")))))
+          (f))
+        (finally
+          (hbase-embedded/delete-table conn "crux" "kv-test"))))))
 
 
 (t/use-fixtures :once

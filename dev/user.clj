@@ -1,6 +1,5 @@
 (ns user
   (:require [io.kosong.crux.hbase.embedded]
-            [io.kosong.crux.kv.hbase :as kv]
             [crux.api :as crux]
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
@@ -26,9 +25,12 @@
            :io.kosong.crux.hbase.embedded/hbase-config       {"hbase.tmp.dir" "./data/hbase-tmp"
                                                               "hbase.rootdir" "./data/hbase"}}
 
-   :node           {:crux.node/topology                    ['io.kosong.crux.kv.hbase/topology]
-                    :crux.kv/check-and-store-index-version true
-                    :crux.document-store/doc-cache-size    131072}})
+   :node  {:crux/index-store    {:kv-store {:crux/module 'io.kosong.crux.kv.hbase/->kv-store
+                                            :table       "index-store"}}
+           :crux/document-store {:kv-store {:crux/module 'io.kosong.crux.kv.hbase/->kv-store
+                                            :table       "document-store"}}
+           :crux/tx-log         {:kv-store {:crux/module 'io.kosong.crux.kv.hbase/->kv-store
+                                            :table       "tx-log"}}}})
 
 (ir/set-prep! (fn [] config))
 

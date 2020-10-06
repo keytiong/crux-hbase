@@ -1,8 +1,7 @@
 (ns io.kosong.crux.hbase.embedded
   (:require [clojure.java.io :as io]
-            [crux.io]
             [clojure.spec.alpha :as s])
-  (:import (org.apache.hadoop.hbase HBaseConfiguration LocalHBaseCluster TableName NamespaceDescriptor NamespaceExistException)
+  (:import (org.apache.hadoop.hbase  HBaseConfiguration LocalHBaseCluster TableName NamespaceDescriptor NamespaceExistException)
            (org.apache.hadoop.hbase.util Bytes)
            (org.apache.hadoop.hbase.zookeeper MiniZooKeeperCluster)
            (java.io Closeable)
@@ -35,7 +34,7 @@
     (stop-zookeeper-cluster zk-cluster)))
 
 (s/def ::zookeeper-data-dir string?)
-(s/def ::zookeeper-port :crux.io/port)
+(s/def ::zookeeper-port int?)
 (s/def ::zookeeper-tick-time int?)
 (s/def ::hbase-config (s/map-of string? string?))
 

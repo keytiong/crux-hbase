@@ -5,7 +5,7 @@ import org.apache.hadoop.hbase.client.*;
 import java.io.Closeable;
 import java.io.IOException;
 
-public class HBaseKvIterator implements Closeable {
+public class HBaseKvIteratorImpl implements Closeable {
 
     private final Table table;
 
@@ -17,7 +17,7 @@ public class HBaseKvIterator implements Closeable {
     private final byte[] family;
     private final byte[] qualifier;
 
-    public HBaseKvIterator(Table table, byte[] family, byte[] qualifier) {
+    public HBaseKvIteratorImpl(Table table, byte[] family, byte[] qualifier) {
         this.table = table;
         this.family = family;
         this.qualifier = qualifier;
