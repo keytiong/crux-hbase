@@ -1,10 +1,10 @@
-(ns io.kosong.crux.kv.hbase
+(ns io.kosong.crux.hbase
   (:require [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.lru :as lru]
             [crux.document-store :as ds]
             [crux.system :as sys])
-  (:import (io.kosong.crux.hbase HBaseKvIteratorImpl)
+  (:import (io.kosong.crux.hbase HBaseIterator)
            (org.apache.hadoop.hbase TableName)
            (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan Connection)
            (java.io Closeable)
@@ -38,13 +38,13 @@
     (when-not (.tableExists admin table-name)
       (.createTable admin table-descriptor))))
 
-(defn- iterator->key [^io.kosong.crux.hbase.HBaseKvIteratorImpl i]
+(defn- iterator->key [^HBaseIterator i]
   (when (.isValid i)
     (mem/->off-heap (.key i))))
 ;;
 ;; KvIterator
 ;;
-(defrecord HBaseKvIterator [^io.kosong.crux.hbase.HBaseKvIteratorImpl i]
+(defrecord HBaseKvIterator [^HBaseIterator i]
   kv/KvIterator
   (seek [_ k]
     (.seek i (mem/->on-heap k))
@@ -71,7 +71,7 @@
 (defrecord HBaseKvSnapshot [^Table table family qualifier]
   kv/KvSnapshot
   (new-iterator [_]
-    (let [i (HBaseKvIteratorImpl. table family qualifier)]
+    (let [i (HBaseIterator. table family qualifier)]
       (->HBaseKvIterator i)))
 
   (get-value [_ k]

@@ -7,7 +7,7 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [io.kosong.crux.kv.hbase :as hbase-kv]
+            [io.kosong.crux.hbase :as hbase-kv]
             [crux.memory :as mem]
             [io.kosong.crux.hbase.embedded :as hbase-embedded])
   (:import java.nio.ByteOrder
