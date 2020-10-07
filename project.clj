@@ -8,11 +8,14 @@
 
   :profiles {:dev {:source-paths ["dev"]}}
 
-  :modules {:parent "./crux-hbase-parent"
+  :modules {:parent "crux-hbase-parent"
             :dirs ["crux-hbase" "crux-hbase-embedded" "crux-hbase-test"]}
 
   :dependencies [[io.kosong.crux/crux-hbase]
-                 [io.kosong.crux/crux-hbase-embedded]]
+                 [io.kosong.crux/crux-hbase-embedded]
+                 [org.clojure/clojure]
+                 [integrant "0.8.0"]
+                 [integrant/repl "0.3.1"]]
 
   :aliases {"clean" ["modules" "clean"]
             "build" ["modules" "compile"]

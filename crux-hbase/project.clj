@@ -2,6 +2,8 @@
   :description "Crux HBase"
   :plugins [[lein-modules "0.3.11"]]
   :modules {:parent "../crux-hbase-parent"}
-  :dependencies [[juxt/crux-core "_"]
-                 [org.apache.hbase/hbase-common _ :exclusions [net.minidev/json-smart]]
-                 [org.apache.hbase/hbase-client _ :exclusions [net.minidev/json-smart]]])
+  :dependencies [[juxt/crux-core _]
+                 [org.apache.hbase/hbase-common _ :exclusions [net.minidev/json-smart
+                                                               org.slf4j/slf4j-log4j12]]
+                 [org.apache.hbase/hbase-client _ :exclusions [net.minidev/json-smart
+                                                               org.slf4j/slf4j-log4j12]]])

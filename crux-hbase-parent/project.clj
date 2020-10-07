@@ -6,13 +6,15 @@
   :plugins [[lein-modules "0.3.11"]]
   :packaging "pom"
   :profiles {:provided  {:dependencies [[org.clojure/clojure _]]}
-             :inherited {:test-paths        ["src/test/clojure"]
-                         :java-source-paths ["src/main/java"]
-                         :source-paths      ["src/main/clojure"]}}
+             :inherited {:test-paths        ^:replace ["src/test/clojure"]
+                         :java-source-paths ^:replace ["src/main/java"]
+                         :source-paths      ^:replace ["src/main/clojure"]}}
   :modules {:parent     nil
-            :versions   {org.clojure/clojure                "1.10.1"
-                         org.apache.hbase                   "2.2.5"
-                         juxt/crux-core                     "20.09-1.12.0-beta"
+            :versions   {:crux                              "20.09-1.12.0-beta"
+                         :hbase                             "2.2.5"
+                         org.clojure/clojure                "1.10.1"
+                         org.apache.hbase                   :hbase
+                         juxt/crux-core                     :crux
                          io.kosong.crux/crux-hbase          :version
                          io.kosong.crux/crux-hbase-embedded :version}
             :subprocess nil})
