@@ -14,5 +14,4 @@ checkouts/
 .lein-failures
 .nrepl-port
 .cpcache/
-data/
-/crux-hbase-test/target/
+/dev/dev-node/

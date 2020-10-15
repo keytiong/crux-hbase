@@ -3,18 +3,21 @@
             [crux.memory :as mem]
             [crux.lru :as lru]
             [crux.document-store :as ds]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.spec.alpha :as s])
   (:import (io.kosong.crux.hbase HBaseIterator)
            (org.apache.hadoop.hbase TableName)
            (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan Connection)
            (java.io Closeable)
            (java.util LinkedList)
            (org.apache.hadoop.hbase.util Bytes)
-           (org.apache.hadoop.hbase.client ConnectionFactory TableDescriptorBuilder ColumnFamilyDescriptorBuilder)
+           (org.apache.hadoop.hbase.client Connection ConnectionFactory TableDescriptorBuilder ColumnFamilyDescriptorBuilder)
            (org.apache.hadoop.hbase HBaseConfiguration NamespaceDescriptor NamespaceExistException NamespaceExistException)
            (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.hbase.util Bytes)))
 
+
+(s/def ::connection #(instance? Connection %))
 
 (defn ensure-namespace [conn ns]
   (let [ns-descriptor (-> ns
@@ -134,11 +137,9 @@
 
   Closeable
   (close [this]
-    (.close table)
-    (when connection
-      (.close connection))))
+    (.close table)))
 
-(defn- start-hbase-connection [hbase-config]
+(defn start-hbase-connection [hbase-config]
   (let [hadoop-conf (reduce-kv (fn [conf k v]
                                  (doto conf (.set k v)))
                                (Configuration.)
@@ -155,64 +156,22 @@
         qualifier  (Bytes/toBytesBinary qualifier)]
     (->HBaseKvStore connection table family qualifier)))
 
-(defn- start-kv-store [{:keys [::connection]}
-                       {:keys [::namespace
-                               ::kv-store-table
-                               ::family
-                               ::qualifier]}]
-  (start-hbase-kv connection namespace kv-store-table family qualifier))
-
-(def hbase-client-options
-  {::hbase-client-config
-   {:doc              "HBase client configuration"
-    :default          {}
-    :crux.config/type :crux.config/string-map}})
-
-(def ^:private default-options
-  {::family
-   {:doc              "HBase column family name"
-    :default          "cf"
-    :crux.config/type :crux.config/string}
-   ::namespace
-   {:doc              "HBase namespace"
-    :default          "crux"
-    :crux.config/type :crux.config/string}
-   ::qualifier
-   {:doc              "HBase column qualifier name"
-    :default          "val"
-    :crux.config/type :crux.config/string}})
-
-
-(def connection
-  {:start-fn start-hbase-connection
-   :args     hbase-client-options})
-
-(def kv-store
-  {:start-fn start-kv-store
-   :deps     [::connection]
-   :args     (merge default-options
-                    {::kv-store-table
-                     {:doc              "HBase table name"
-                      :default          "kv-store"
-                      :crux.config/type :crux.config/string}})})
-
-
-(defn ->kv-store {::sys/deps {:metrics (fn [_])}
-                  ::sys/args {:table         {:doc       "Table name"
-                                              :required? true
-                                              :spec      ::sys/string}
-                              :family        {:doc     "Column family name"
-                                              :default "cf"
-                                              :spec    ::sys/string}
-                              :namespace     {:doc     "Hbase namespace"
-                                              :default "crux"
-                                              :spec    ::sys/string}
-                              :qualifier     {:doc     "Hbase column qualifier"
-                                              :default "val"
-                                              :spec    ::sys/string}
-                              :client-config {:doc     "Hbase client configuration"
-                                              :default {}
-                                              :spec    ::sys/string-map}}}
-  [{:keys [table family namespace metrics qualifier client-config] :as options}]
-  (let [connection (start-hbase-connection client-config)]
+(defn ->kv-store {::sys/args {:connection {:doc       "HBase connection"
+                                           :required? true
+                                           :spec      ::connection}
+                              :table      {:doc       "Table name"
+                                           :required? true
+                                           :spec      ::sys/string}
+                              :family     {:doc     "Column family name"
+                                           :default "cf"
+                                           :spec    ::sys/string}
+                              :namespace  {:doc     "Hbase namespace"
+                                           :default "crux"
+                                           :spec    ::sys/string}
+                              :qualifier  {:doc     "Hbase column qualifier"
+                                           :default "val"
+                                           :spec    ::sys/string}}}
+  [{:keys [table family namespace qualifier connection]}]
+  (do
+    (ensure-table connection namespace table family)
     (start-hbase-kv connection namespace table family qualifier)))

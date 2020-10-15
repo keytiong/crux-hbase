@@ -5,6 +5,9 @@
 
   :profiles {:dev {:resource-paths ["src/test/resources"]}}
 
+  :source-paths ["src/main/clojure"]
+  :test-paths ["src/test/clojure"]
+
   :dependencies [[io.kosong.crux/crux-hbase :version]
                  [io.kosong.crux/crux-hbase-embedded :version]
                  [juxt/crux-core]

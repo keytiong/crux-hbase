@@ -1,26 +1,32 @@
 # crux-hbase
-Crux KV implementation with HBase
-
-## Build
-
-```shell script
-lein modules install
-```
+[Crux](https://opencrux.com) key value store implementation with [HBase](https://hbase.apache.org).
 
 ## Development
 
-### REPL
+- Build
+``` shell script
+lein modules install
+```
 
+- Testing
+``` shell script
+lein build
+```
+
+- To run a Clojure REPL for development
 ```shell script
-cd crux-hbase-dev
+lein modules install
 lein repl
 ```
 
+- When in Clojure REPL `user` namespace
 
 ```clojure
-# Start
+; Start embedded Zookeeper, HBase local cluster and Crux
 (go)
 
-# Stop
+(crux/status (crux-node))
+
+; Stop cluster
 (halt)
 ```

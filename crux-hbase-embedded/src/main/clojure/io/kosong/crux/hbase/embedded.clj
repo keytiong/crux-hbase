@@ -1,6 +1,7 @@
 (ns io.kosong.crux.hbase.embedded
   (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [crux.system :as sys])
   (:import (org.apache.hadoop.hbase  HBaseConfiguration LocalHBaseCluster TableName NamespaceDescriptor NamespaceExistException)
            (org.apache.hadoop.hbase.util Bytes)
            (org.apache.hadoop.hbase.zookeeper MiniZooKeeperCluster)
@@ -16,6 +17,7 @@
 (def default-zookeeper-tick-time 2000)
 
 (defn- stop-hbase-cluster [^LocalHBaseCluster hbase-cluster]
+  (DefaultMetricsSystem/shutdown)
   (.shutdown hbase-cluster)
   (.join hbase-cluster))
 
@@ -27,30 +29,33 @@
   (close [_]
     (stop-zookeeper-cluster zk-cluster)))
 
-(defrecord EmbeddedHBase [zk-cluster hbase-cluster]
+(defrecord EmbeddedHBase [hbase-cluster]
   Closeable
   (close [_]
-    (stop-hbase-cluster hbase-cluster)
-    (stop-zookeeper-cluster zk-cluster)))
+    (stop-hbase-cluster hbase-cluster)))
 
-(s/def ::zookeeper-data-dir string?)
-(s/def ::zookeeper-port int?)
+(s/def ::zookeeper-data-dir ::sys/path)
+(s/def ::zookeeper-port :crux.io/port)
 (s/def ::zookeeper-tick-time int?)
 (s/def ::hbase-config (s/map-of string? string?))
 
-(s/def ::options (s/keys :req [::zookeeper-data-dir]
-                         :opt [::zookeeper-port
-                               ::zookeeper-tick-time
-                               ::hbase-config]))
+(s/def ::zookeeper-options (s/keys :req [::zookeeper-data-dir]
+                                   :opt [::zookeeper-port
+                                         ::zookeeper-tick-time]))
+
+(s/def ::hbase-options (s/keys :opt [::zookeeper-port
+                                     ::zookeeper-tick-time
+                                     ::hbase-config]))
 
 (defn- start-zookeeper-cluster ^MiniZooKeeperCluster
   [{::keys [zookeeper-port zookeeper-tick-time zookeeper-data-dir]
     :or    {zookeeper-port      default-zookeeper-port
             zookeeper-tick-time default-zookeeper-tick-time}}]
-  (doto (MiniZooKeeperCluster. (HBaseConfiguration/create))
-    (.setDefaultClientPort zookeeper-port)
-    (.setTickTime zookeeper-tick-time)
-    (.startup (io/file zookeeper-data-dir))))
+  (let [zk (doto (MiniZooKeeperCluster. (HBaseConfiguration/create))
+             (.addClientPort zookeeper-port)
+             (.setTickTime zookeeper-tick-time)
+             (.startup (io/file zookeeper-data-dir)))]
+    zk))
 
 (defn- hbase-conf [kvs]
   (let [conf (HBaseConfiguration/create)]
@@ -60,27 +65,32 @@
 
 (defn- start-hbase-cluster ^LocalHBaseCluster [{kvs ::hbase-config}]
   (DefaultMetricsSystem/setMiniClusterMode true)
-  (doto (LocalHBaseCluster. (hbase-conf kvs)
-                            1
-                            1
-                            HMasterCommandLine$LocalHMaster
-                            HRegionServer)
-    (.startup)))
+  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf kvs)
+                                                1
+                                                1
+                                                HMasterCommandLine$LocalHMaster
+                                                HRegionServer)
+                        (.startup))]
+    hbase-cluster))
 
 (defn start-embedded-hbase ^Closeable [options]
-  (s/assert ::options options)
-  (let [zk-cluster    (start-zookeeper-cluster options)
-        hbase-cluster (start-hbase-cluster options)]
-    (->EmbeddedHBase zk-cluster hbase-cluster)))
+  (s/assert ::hbase-options options)
+  (let [hbase-cluster (start-hbase-cluster options)]
+    (->EmbeddedHBase hbase-cluster)))
+
+(defn start-embedded-zookeeper ^Closeable [options]
+  (s/assert ::zookeeper-options options)
+  (let [zk-cluster (start-zookeeper-cluster options)]
+    (->EmbeddedZookeeper zk-cluster)))
 
 (defn ensure-namespace [conn ns]
   (let [ns-descriptor (-> ns
                           (NamespaceDescriptor/create)
-                          (.build))
-        admin         (.getAdmin conn)]
-    (try
-      (.createNamespace admin ns-descriptor)
-      (catch NamespaceExistException e))))
+                          (.build))]
+    (with-open [admin (.getAdmin conn)]
+      (try
+        (.createNamespace admin ns-descriptor)
+        (catch NamespaceExistException _)))))
 
 (defn ensure-table [conn ^String ns ^String table ^String family]
   (ensure-namespace conn ns)
@@ -90,10 +100,10 @@
                              (.build))
         table-descriptor (-> (TableDescriptorBuilder/newBuilder table-name)
                              (.addColumnFamily cf)
-                             (.build))
-        admin            (.getAdmin conn)]
-    (when-not (.tableExists admin table-name)
-      (.createTable admin table-descriptor))))
+                             (.build))]
+    (with-open [admin (.getAdmin conn)]
+      (when-not (.tableExists admin table-name)
+        (.createTable admin table-descriptor)))))
 
 (defn create-table [conn ns table family]
   (ensure-namespace conn ns)

@@ -3,12 +3,11 @@
   :url "https://github.com/keytiong/crux-hbase"
   :license {:name "The MIT License"
             :url  "http://opensource.org/licenses/MIT"}
+  :sum {:dir ".."}
   :plugins [[lein-modules "0.3.11"]]
   :packaging "pom"
-  :profiles {:provided  {:dependencies [[org.clojure/clojure _]]}
-             :inherited {:test-paths        ^:replace ["src/test/clojure"]
-                         :java-source-paths ^:replace ["src/main/java"]
-                         :source-paths      ^:replace ["src/main/clojure"]}}
+  :profiles {:provided  {:dependencies [[org.clojure/clojure]]}
+             :inherited {}}
   :modules {:parent     nil
             :versions   {:crux                              "20.09-1.12.0-beta"
                          :hbase                             "2.2.5"

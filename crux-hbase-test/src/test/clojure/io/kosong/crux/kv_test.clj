@@ -9,7 +9,7 @@
             [crux.kv :as kv]
             [io.kosong.crux.hbase :as hbase-kv]
             [crux.memory :as mem]
-            [io.kosong.crux.hbase.embedded :as hbase-embedded])
+            [io.kosong.crux.hbase.embedded :as ehb])
   (:import java.nio.ByteOrder
            org.agrona.concurrent.UnsafeBuffer
            org.apache.hadoop.hbase.TableName
@@ -22,20 +22,23 @@
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-module* 'crux.kv.hbase/kv-store)
 
-(def hbase-opts {:io.kosong.crux.hbase.embedded/zookeeper-data-dir "./data/zk-data-dir"
-                 :io.kosong.crux.hbase.embedded/hbase-data-dir     "./data/hbase-data-dir"
-                 :io.kosong.crux.hbase.embedded/hbase-config       {"hbase.tmp.dir" "./data/hbase-tmp"
-                                                                    "hbase.rootdir" "./data/hbase"}})
+(def hbase-opts {::ehb/zookeeper-port 2181
+                 :io.kosong.crux.hbase.embedded/hbase-config   {"hbase.tmp.dir" "./data/hbase/tmp"
+                                                                "hbase.rootdir" "./data/hbase"}})
+(def zk-opts {::ehb/zookeeper-port     2181
+              ::ehb/zookeeper-data-dir "./data/zookeeper"})
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
     (f)))
 
 (defn with-hbase-embedded [f]
-  (let [hbase (hbase-embedded/start-embedded-hbase hbase-opts)]
+  (let [zk    (ehb/start-embedded-zookeeper zk-opts)
+        hbase (ehb/start-embedded-hbase hbase-opts)]
     (t/testing "HBase"
       (f))
-    (.close hbase)))
+    (.close hbase)
+    (.close zk)))
 
 (defn- start-hbase-kv [connection namespace table family qualifier]
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
@@ -48,13 +51,13 @@
 (defn with-kv-store [f]
   (with-open [conn (-> (HBaseConfiguration/create)
                        (ConnectionFactory/createConnection))]
-    (hbase-embedded/create-table conn "crux" "kv-test" "cf")
+    (ehb/create-table conn "crux" "kv-test" "cf")
     (let [kv (start-hbase-kv conn "crux" "kv-test" "cf" "val")]
       (try
         (binding [*kv* kv]
           (f))
         (finally
-          (hbase-embedded/delete-table conn "crux" "kv-test"))))))
+          (ehb/delete-table conn "crux" "kv-test"))))))
 
 
 (t/use-fixtures :once
@@ -90,54 +93,54 @@
                                                    (t/is (nil? (value *kv* (long->bytes i))))))))
 
 (t/deftest test-seek-and-iterate-range []
-  (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
-   (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
+                                       (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
+                                         (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
-  (t/testing "seek range is exclusive"
-   (t/is (= [["b" 2] ["c" 3]]
-            (for [[^bytes k v] (seek-and-iterate *kv*
-                                                 #(neg? (compare-bytes % (.getBytes "d")))
-                                                 (.getBytes "b"))]
-              [(String. k) (bytes->long v)]))))
+                                       (t/testing "seek range is exclusive"
+                                         (t/is (= [["b" 2] ["c" 3]]
+                                                  (for [[^bytes k v] (seek-and-iterate *kv*
+                                                                                       #(neg? (compare-bytes % (.getBytes "d")))
+                                                                                       (.getBytes "b"))]
+                                                    [(String. k) (bytes->long v)]))))
 
-  (t/testing "seek range after existing keys returns empty"
-   (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "d"))) (.getBytes "d"))))
-   (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "f")%)) (.getBytes "e")))))
+                                       (t/testing "seek range after existing keys returns empty"
+                                         (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "d"))) (.getBytes "d"))))
+                                         (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "f") %)) (.getBytes "e")))))
 
-  (t/testing "seek range before existing keys returns keys at start"
-   (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
-                        [(String. k) (bytes->long v)])))))
+                                       (t/testing "seek range before existing keys returns keys at start"
+                                         (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
+                                                              [(String. k) (bytes->long v)])))))
 
 (t/deftest test-seek-between-keys []
-  (doseq [[^String k v] {"a" 1 "c" 3}]
-    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
+                                  (doseq [[^String k v] {"a" 1 "c" 3}]
+                                    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
-  (t/testing "seek returns next valid key"
-    (t/is (= ["c" 3]
-             (let [[^bytes k v] (seek *kv* (.getBytes "b"))]
-               [(String. k) (bytes->long v)])))))
+                                  (t/testing "seek returns next valid key"
+                                    (t/is (= ["c" 3]
+                                             (let [[^bytes k v] (seek *kv* (.getBytes "b"))]
+                                               [(String. k) (bytes->long v)])))))
 
 (t/deftest test-seek-and-iterate-prefix []
-  (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
-    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
+                                        (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
+                                          (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
-  (t/testing "seek within bounded prefix returns all matching keys"
-    (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-             (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(bytes=? (.getBytes "b") % (alength (.getBytes "b"))) (.getBytes "b")))]
-               [(String. k) (bytes->long v)]))))
+                                        (t/testing "seek within bounded prefix returns all matching keys"
+                                          (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
+                                                   (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(bytes=? (.getBytes "b") % (alength (.getBytes "b"))) (.getBytes "b")))]
+                                                     [(String. k) (bytes->long v)]))))
 
-  (t/testing "seek within bounded prefix before or after existing keys returns empty"
-    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "0")) (.getBytes "0")))))
-    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "e")) (.getBytes "0")))))))
+                                        (t/testing "seek within bounded prefix before or after existing keys returns empty"
+                                          (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "0")) (.getBytes "0")))))
+                                          (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "e")) (.getBytes "0")))))))
 
 (t/deftest test-delete-keys []
-  (t/testing "store, retrieve and delete value"
-    (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
-    (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))
-    (kv/delete *kv* [(long->bytes 1)])
-    (t/is (nil? (value *kv* (long->bytes 1))))
-    (t/testing "deleting non existing key is noop"
-      (kv/delete *kv* [(long->bytes 1)]))))
+                            (t/testing "store, retrieve and delete value"
+                              (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
+                              (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))
+                              (kv/delete *kv* [(long->bytes 1)])
+                              (t/is (nil? (value *kv* (long->bytes 1))))
+                              (t/testing "deleting non existing key is noop"
+                                (kv/delete *kv* [(long->bytes 1)]))))
 
 (t/deftest test-compact []
                         (t/testing "store, retrieve and delete value"
@@ -179,7 +182,7 @@
                                 (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
                               (with-open [snapshot (kv/new-snapshot *kv*)
-                                          i (kv/new-iterator snapshot)]
+                                          i        (kv/new-iterator snapshot)]
                                 (t/testing "seek returns next valid key"
                                   (let [k (kv/seek i (mem/as-buffer (.getBytes "b")))]
                                     (t/is (= ["c" 3] [(String. (mem/->on-heap k)) (bytes->long (mem/->on-heap (kv/value i)))]))))
@@ -242,7 +245,7 @@
                                                           :seek+nexts [state (subseq state >= (c/->value-buffer k))]
                                                           :seek+prevs [state (some->> (subseq state >= (c/->value-buffer k))
                                                                                       (ffirst)
-                                                                                      (rsubseq state <= ))]
+                                                                                      (rsubseq state <=))]
                                                           :fsync [state]
                                                           :delete [(dissoc state (c/->value-buffer k))]
                                                           :store [(assoc state
@@ -258,14 +261,14 @@
                                               :get-value (with-open [snapshot (kv/new-snapshot *kv*)]
                                                            (kv/get-value snapshot (c/->value-buffer k)))
                                               :seek (with-open [snapshot (kv/new-snapshot *kv*)
-                                                                i (kv/new-iterator snapshot)]
+                                                                i        (kv/new-iterator snapshot)]
                                                       (kv/seek i (c/->value-buffer k)))
                                               :seek+value (with-open [snapshot (kv/new-snapshot *kv*)
-                                                                      i (kv/new-iterator snapshot)]
+                                                                      i        (kv/new-iterator snapshot)]
                                                             (when (kv/seek i (c/->value-buffer k))
                                                               (kv/value i)))
                                               :seek+nexts (with-open [snapshot (kv/new-snapshot *kv*)
-                                                                      i (kv/new-iterator snapshot)]
+                                                                      i        (kv/new-iterator snapshot)]
                                                             (when-let [k (kv/seek i (c/->value-buffer k))]
                                                               (cons [(mem/copy-to-unpooled-buffer k)
                                                                      (mem/copy-to-unpooled-buffer (kv/value i))]
@@ -277,7 +280,7 @@
                                                                          (take-while identity)
                                                                          (vec)))))
                                               :seek+prevs (with-open [snapshot (kv/new-snapshot *kv*)
-                                                                      i (kv/new-iterator snapshot)]
+                                                                      i        (kv/new-iterator snapshot)]
                                                             (when-let [k (kv/seek i (c/->value-buffer k))]
                                                               (cons [(mem/copy-to-unpooled-buffer k)
                                                                      (mem/copy-to-unpooled-buffer (kv/value i))]
@@ -301,7 +304,7 @@
 
 (defn seek [kvs k]
   (with-open [snapshot (kv/new-snapshot kvs)
-              i (kv/new-iterator snapshot)]
+              i        (kv/new-iterator snapshot)]
     (when-let [k (kv/seek i k)]
       [(mem/->on-heap k) (mem/->on-heap (kv/value i))])))
 
@@ -312,9 +315,9 @@
 
 (defn seek-and-iterate [kvs key-pred seek-k]
   (with-open [snapshot (kv/new-snapshot kvs)
-              i (kv/new-iterator snapshot)]
+              i        (kv/new-iterator snapshot)]
     (loop [acc (transient [])
-           k (kv/seek i seek-k)]
+           k   (kv/seek i seek-k)]
       (let [k (when k
                 (mem/->on-heap k))]
         (if (and k (key-pred k))
@@ -348,7 +351,7 @@
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
              (= backend (str *kv-module*))
              true))
-    (let [n 1000000
+    (let [n  1000000
           ks (vec (for [n (range n)]
                     (mem/->off-heap (.getBytes (format "%020x" n)))))]
       (println *kv-module* "off-heap")
@@ -369,10 +372,10 @@
                 ;; TODO: Note, the cached decorator still uses
                 ;; bytes, so we grab the underlying kv store.
                 (with-open [snapshot (kv/new-snapshot (:kv *kv*))
-                            i (kv/new-iterator snapshot)]
+                            i        (kv/new-iterator snapshot)]
                   (dotimes [idx n]
                     (let [idx (- (dec n) idx)
-                          k (get ks idx)]
+                          k   (get ks idx)]
                       (assert (mem/buffers=? k (kv/seek i k)))
                       (assert (mem/buffers=? k (kv/value i))))))))
             (println "Done")))
