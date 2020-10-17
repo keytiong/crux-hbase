@@ -23,10 +23,10 @@
 (def ^:dynamic *kv-module* 'crux.kv.hbase/kv-store)
 
 (def hbase-opts {::ehb/zookeeper-port 2181
-                 :io.kosong.crux.hbase.embedded/hbase-config   {"hbase.tmp.dir" "./data/hbase/tmp"
-                                                                "hbase.rootdir" "./data/hbase"}})
+                 :io.kosong.crux.hbase.embedded/hbase-config   {"hbase.tmp.dir" "./target/hbase/tmp"
+                                                                "hbase.rootdir" "./target/hbase"}})
 (def zk-opts {::ehb/zookeeper-port     2181
-              ::ehb/zookeeper-data-dir "./data/zookeeper"})
+              ::ehb/zookeeper-data-dir "./target/zookeeper"})
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
