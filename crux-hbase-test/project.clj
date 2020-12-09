@@ -8,7 +8,7 @@
   :source-paths ["src/main/clojure"]
   :test-paths ["src/test/clojure"]
 
-  :dependencies [[io.kosong.crux/crux-hbase :version]
-                 [io.kosong.crux/crux-hbase-embedded :version]
+  :dependencies [[io.kosong.crux/crux-hbase :version :exclusions [io.netty/netty]]
+                 [io.kosong.crux/crux-hbase-embedded :version :exclusions [io.netty/netty]]
                  [juxt/crux-core]
                  [org.clojure/test.check "0.10.0"]])

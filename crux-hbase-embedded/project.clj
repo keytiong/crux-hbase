@@ -6,8 +6,11 @@
   :source-paths ^:replace ["src/main/clojure"]
   :java-source-paths ^:replace ["src/main/java"]
   :test-paths ^:replace ["src/test/clojure"]
-  :dependencies [[org.apache.hbase/hbase-common _ :exclusions [net.minidev/json-smart]]
-                 [org.apache.hbase/hbase-client _ :exclusions [net.minidev/json-smart]]
-                 [org.apache.hbase/hbase-server _ :exclusions [net.minidev/json-smart
-                                                               org.glassfish/javax.el]]])
-
+  :dependencies [[org.apache.hbase/hbase-client _ :exclusions [com.google.guava/guava
+                                                               io.netty/netty
+                                                               net.minidev/json-smart]]
+                 [org.apache.hbase/hbase-server _ :exclusions [com.google.guava/guava
+                                                               io.netty/netty
+                                                               org.glassfish/javax.el
+                                                               net.minidev/json-smart]]
+                 [org.apache.zookeeper/zookeeper "3.6.2"]])

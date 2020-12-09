@@ -9,7 +9,10 @@
   :source-paths ^:replace ["src/main/clojure"]
   :java-source-paths ^:replace ["src/main/java"]
   :dependencies [[juxt/crux-core _]
-                 [org.apache.hbase/hbase-common _ :exclusions [net.minidev/json-smart
+                 [org.apache.hbase/hbase-client _ :exclusions [commons-logging
+                                                               net.minidev/json-smart
                                                                org.slf4j/slf4j-log4j12]]
-                 [org.apache.hbase/hbase-client _ :exclusions [net.minidev/json-smart
-                                                               org.slf4j/slf4j-log4j12]]])
+                 ;; dependency conflict resolution
+                 [com.google.guava/guava "16.0.1"]
+
+                 ])
