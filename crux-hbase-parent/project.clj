@@ -7,10 +7,10 @@
   :plugins [[lein-modules "0.3.11"]]
   :packaging "pom"
   :profiles {:provided  {:dependencies [[org.clojure/clojure]]}
-             :inherited {:javac-options ["-target" "1.8" "-source" "1.8"]}}
+             :inherited {:javac-options ["--release" "8"]}}
   :modules {:parent     nil
             :versions   {:crux                              "20.09-1.12.0-beta"
-                         :hbase                             "2.2.5"
+                         :hbase                             "2.2.6"
                          org.clojure/clojure                "1.10.1"
                          org.apache.hbase                   :hbase
                          juxt/crux-core                     :crux
