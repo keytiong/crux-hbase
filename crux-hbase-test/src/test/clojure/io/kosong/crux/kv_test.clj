@@ -24,10 +24,11 @@
 
 (def hbase-opts {::ehb/zookeeper-port 2181
                  :io.kosong.crux.hbase.embedded/hbase-config   {"hbase.tmp.dir" "./target/hbase/tmp"
-                                                                "hbase.rootdir" "./target/hbase"}})
+                                                                "hbase.rootdir" "./target/hbase"
+                                                                "hbase.master.info.port" "-1"
+                                                                "hbase.regionserver.info.port" "-1"}})
 (def zk-opts {::ehb/zookeeper-port     2181
               ::ehb/zookeeper-data-dir "./target/zookeeper"})
-
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
     (f)))

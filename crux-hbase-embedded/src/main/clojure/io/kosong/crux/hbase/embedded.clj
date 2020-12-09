@@ -6,8 +6,6 @@
            (org.apache.hadoop.hbase.util Bytes)
            (org.apache.hadoop.hbase.zookeeper MiniZooKeeperCluster)
            (java.io Closeable)
-           (org.apache.hadoop.hbase.regionserver HRegionServer)
-           (org.apache.hadoop.hbase.master HMasterCommandLine$LocalHMaster)
            (org.apache.hadoop.metrics2.lib DefaultMetricsSystem)
            (org.apache.hadoop.hbase.client TableDescriptorBuilder ColumnFamilyDescriptorBuilder)))
 ;; Based on
@@ -65,11 +63,7 @@
 
 (defn- start-hbase-cluster ^LocalHBaseCluster [{kvs ::hbase-config}]
   (DefaultMetricsSystem/setMiniClusterMode true)
-  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf kvs)
-                                                1
-                                                1
-                                                HMasterCommandLine$LocalHMaster
-                                                HRegionServer)
+  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf kvs))
                         (.startup))]
     hbase-cluster))
 
