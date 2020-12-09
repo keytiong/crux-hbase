@@ -46,9 +46,12 @@
    :ex/embedded-hbase     {:hbase-dir    (io/file dev-node-dir "hbase")
                            :deps         [(ig/ref :ex/embedded-zookeeper)]
                            :zk-port      2181
-                           :hbase-config {}}
+                           :hbase-config {"hbase.master.info.port"                       "-1"
+                                          "hbase.regionserver.info.port"                 "-1"
+                                          "hbase.master.start.timeout.localHBaseCluster" "60000"
+                                          "hbase.unsafe.stream.capability.enforce"       "false"}}
 
-   :ex/hbase-connection   {:deps  [(ig/ref :ex/embedded-hbase)]
+   :ex/hbase-connection   {:deps         [(ig/ref :ex/embedded-hbase)]
                            :hbase-config {}}
 
    :ex/crux               {:crux/index-store    {:kv-store {:crux/module 'hb/->kv-store

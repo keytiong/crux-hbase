@@ -13,4 +13,8 @@
                                                                io.netty/netty
                                                                org.glassfish/javax.el
                                                                net.minidev/json-smart]]
-                 [org.apache.zookeeper/zookeeper "3.6.2"]])
+                 [org.apache.zookeeper/zookeeper "3.6.2"]
+                 [org.eclipse.jetty/jetty-util "9.4.35.v20201120"]
+
+                 ;; dependency conflict resolution
+                 [commons-logging "1.2"]])

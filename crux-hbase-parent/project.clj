@@ -10,7 +10,7 @@
              :inherited {:javac-options ["--release" "8"]}}
   :modules {:parent     nil
             :versions   {:crux                              "20.09-1.12.0-beta"
-                         :hbase                             "2.2.6"
+                         :hbase                             "2.3.3"
                          org.clojure/clojure                "1.10.1"
                          org.apache.hbase                   :hbase
                          juxt/crux-core                     :crux
