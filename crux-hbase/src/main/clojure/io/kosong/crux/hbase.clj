@@ -156,10 +156,8 @@
         qualifier  (Bytes/toBytesBinary qualifier)]
     (->HBaseKvStore connection table family qualifier)))
 
-(defn ->kv-store {::sys/args {:connection {:doc       "HBase connection"
-                                           :required? true
-                                           :spec      ::connection}
-                              :table      {:doc       "Table name"
+(defn ->kv-store {::sys/deps {:connection (fn [_])}
+                  ::sys/args {:table      {:doc       "Table name"
                                            :required? true
                                            :spec      ::sys/string}
                               :family     {:doc     "Column family name"
@@ -175,3 +173,9 @@
   (do
     (ensure-table connection namespace table family)
     (start-hbase-kv connection namespace table family qualifier)))
+
+(defn ->hbase-connection {::sys/args {:hbase-config {:doc "HBase Client configuration"}
+                                      :required?    true
+                                      :spec         ::sys/string-map}}
+  [{:keys [hbase-config]}]
+  (start-hbase-connection hbase-config))
