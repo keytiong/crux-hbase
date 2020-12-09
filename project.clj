@@ -14,7 +14,8 @@
                                    [io.kosong.crux/crux-hbase-embedded :version]
                                    [org.clojure/clojure]
                                    [integrant "0.8.0"]
-                                   [integrant/repl "0.3.1"]]}
+                                   [integrant/repl "0.3.1"]
+                                   [org.clojure/tools.namespace "1.1.0"]]}
              :dev [:repl]
              :nrepl {:dependencies [[nrepl "0.8.3"]
                                     [clojure-complete "0.2.5"]]}}

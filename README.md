@@ -10,7 +10,7 @@ lein modules install
 
 - Testing
 ``` shell script
-lein build
+lein modules test
 ```
 
 - To run a Clojure REPL for development
@@ -22,6 +22,9 @@ lein repl
 - When in Clojure REPL `user` namespace
 
 ```clojure
+; Switch to dev namespace
+(dev)
+
 ; Start embedded Zookeeper, HBase local cluster and Crux
 (go)
 
