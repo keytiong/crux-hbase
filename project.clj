@@ -7,17 +7,20 @@
             [nrepl/lein-nrepl "0.3.2"]]
   :packaging "pom"
 
-  :profiles {:dev {:source-paths ^:replace ["dev"]
-                   :dependencies [[nrepl "0.8.2"]]}}
+  :source-paths ^:replace ["dev"]
+
+  :profiles {:repl {
+                    :dependencies [[io.kosong.crux/crux-hbase :version]
+                                   [io.kosong.crux/crux-hbase-embedded :version]
+                                   [org.clojure/clojure]
+                                   [integrant "0.8.0"]
+                                   [integrant/repl "0.3.1"]]}
+             :dev [:repl]
+             :nrepl {:dependencies [[nrepl "0.8.3"]
+                                    [clojure-complete "0.2.5"]]}}
 
   :modules {:parent "crux-hbase-parent"
             :dirs ["crux-hbase" "crux-hbase-embedded" "crux-hbase-test"]}
-
-  :dependencies [[io.kosong.crux/crux-hbase "0.1.0-SNAPSHOT"]
-                 [io.kosong.crux/crux-hbase-embedded "0.1.0-SNAPSHOT"]
-                 [org.clojure/clojure "1.10.1"]
-                 [integrant "0.8.0"]
-                 [integrant/repl "0.3.1"]]
 
   :aliases {"clean" ["modules" "clean"]
             "build" ["do" ["modules" "install"] ["modules" "test"]]
