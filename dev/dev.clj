@@ -17,11 +17,8 @@
 (defmethod ig/halt-key! ::crux [_ ^ICruxAPI node]
   (.close node))
 
-(defmethod ig/init-key ::embedded-hbase [_ {:keys [hbase-dir hbase-config zk-port]}]
-  (let [hbase-config (merge {"hbase.rootdir" (.getPath hbase-dir)}
-                            hbase-config)]
-    (ehb/start-embedded-hbase #::ehb{:zookeeper-port zk-port
-                                     :hbase-config   hbase-config})))
+(defmethod ig/init-key ::embedded-hbase [_ {:keys [hbase-config]}]
+  (ehb/start-embedded-hbase #::ehb{:hbase-config   hbase-config}))
 
 (defmethod ig/halt-key! ::embedded-hbase [_ hbase]
   (.close hbase))
@@ -37,9 +34,9 @@
   {::embedded-zookeeper {:zk-data-dir (io/file dev-node-dir "zookeeper")
                          :zk-port     2181}
 
-   ::embedded-hbase     {:hbase-dir    (io/file dev-node-dir "hbase")
-                         :deps         [(ig/ref ::embedded-zookeeper)]
-                         :hbase-config {"hbase.master.info.port"                       "-1"
+   ::embedded-hbase     {:deps         [(ig/ref ::embedded-zookeeper)]
+                         :hbase-config {"hbase.rootdir"                                (.getPath (io/file dev-node-dir "hbase"))
+                                        "hbase.master.info.port"                       "-1"
                                         "hbase.regionserver.info.port"                 "-1"
                                         "hbase.master.start.timeout.localHBaseCluster" "60000"
                                         "hbase.unsafe.stream.capability.enforce"       "false"
