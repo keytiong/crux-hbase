@@ -4,7 +4,7 @@
             [crux.system :as sys])
   (:import (org.apache.hadoop.hbase  HBaseConfiguration LocalHBaseCluster TableName NamespaceDescriptor NamespaceExistException)
            (org.apache.hadoop.hbase.util Bytes)
-           (org.apache.hadoop.hbase.zookeeper MiniZooKeeperCluster)
+           (org.apache.zookeeper.server ZooKeeperServer ServerCnxnFactory)
            (java.io Closeable)
            (org.apache.hadoop.metrics2.lib DefaultMetricsSystem)
            (org.apache.hadoop.hbase.client TableDescriptorBuilder ColumnFamilyDescriptorBuilder)))
@@ -19,13 +19,15 @@
   (.shutdown hbase-cluster)
   (.join hbase-cluster))
 
-(defn- stop-zookeeper-cluster [^MiniZooKeeperCluster zk-cluster]
-  (.shutdown zk-cluster))
+(defn- stop-zookeeper-server [^ZooKeeperServer zk-server]
+  (let [conn-factory (.getServerCnxnFactory zk-server)]
+    (.shutdown zk-server)
+    (.shutdown conn-factory)))
 
-(defrecord EmbeddedZookeeper [^MiniZooKeeperCluster zk-cluster]
+(defrecord EmbeddedZookeeper [^ZooKeeperServer zk-server]
   Closeable
   (close [_]
-    (stop-zookeeper-cluster zk-cluster)))
+    (stop-zookeeper-server zk-server)))
 
 (defrecord EmbeddedHBase [hbase-cluster]
   Closeable
@@ -45,15 +47,18 @@
                                      ::zookeeper-tick-time
                                      ::hbase-config]))
 
-(defn- start-zookeeper-cluster ^MiniZooKeeperCluster
+(defn- start-zookeeper-server ^ZooKeeperServer
   [{::keys [zookeeper-port zookeeper-tick-time zookeeper-data-dir]
     :or    {zookeeper-port      default-zookeeper-port
             zookeeper-tick-time default-zookeeper-tick-time}}]
-  (let [zk (doto (MiniZooKeeperCluster. (HBaseConfiguration/create))
-             (.addClientPort zookeeper-port)
-             (.setTickTime zookeeper-tick-time)
-             (.startup (io/file zookeeper-data-dir)))]
-    zk))
+  (let [max-conn 16
+        data-dir (io/file zookeeper-data-dir)
+        conn-factory (ServerCnxnFactory/createFactory zookeeper-port max-conn)
+        server (ZooKeeperServer. data-dir
+                                 data-dir
+                                 zookeeper-tick-time)]
+    (.startup conn-factory server)
+    server))
 
 (defn- hbase-conf [kvs]
   (let [conf (HBaseConfiguration/create)]
@@ -61,9 +66,9 @@
       (.set conf k v))
     conf))
 
-(defn- start-hbase-cluster ^LocalHBaseCluster [{kvs ::hbase-config}]
+(defn- start-hbase-cluster ^LocalHBaseCluster [{::keys [hbase-config]}]
   (DefaultMetricsSystem/setMiniClusterMode true)
-  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf kvs))
+  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf hbase-config))
                         (.startup))]
     hbase-cluster))
 
@@ -74,7 +79,7 @@
 
 (defn start-embedded-zookeeper ^Closeable [options]
   (s/assert ::zookeeper-options options)
-  (let [zk-cluster (start-zookeeper-cluster options)]
+  (let [zk-cluster (start-zookeeper-server options)]
     (->EmbeddedZookeeper zk-cluster)))
 
 (defn ensure-namespace [conn ns]

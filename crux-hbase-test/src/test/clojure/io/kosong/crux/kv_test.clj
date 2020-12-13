@@ -3,9 +3,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [crux.node :as n]
             [crux.codec :as c]
-            [crux.io :as cio]
             [crux.kv :as kv]
             [io.kosong.crux.hbase :as hbase-kv]
             [crux.memory :as mem]
@@ -22,8 +20,7 @@
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-module* 'crux.kv.hbase/kv-store)
 
-(def hbase-opts {::ehb/zookeeper-port                        2181
-                 :io.kosong.crux.hbase.embedded/hbase-config {"hbase.tmp.dir"                          "./target/hbase/tmp"
+(def hbase-opts {:io.kosong.crux.hbase.embedded/hbase-config {"hbase.tmp.dir"                          "./target/hbase/tmp"
                                                               "hbase.rootdir"                          "./target/hbase"
                                                               "hbase.master.info.port"                 "-1"
                                                               "hbase.regionserver.info.port"           "-1"
