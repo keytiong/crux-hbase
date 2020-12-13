@@ -54,7 +54,6 @@
   (let [max-conn 16
         data-dir (io/file zookeeper-data-dir)
         conn-factory (ServerCnxnFactory/createFactory zookeeper-port max-conn)
-        _ (do (println zookeeper-data-dir))
         server (ZooKeeperServer. data-dir
                                  data-dir
                                  zookeeper-tick-time)]
