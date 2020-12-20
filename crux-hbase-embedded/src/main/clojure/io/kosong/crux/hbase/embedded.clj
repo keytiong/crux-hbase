@@ -67,10 +67,10 @@
     conf))
 
 (defn- start-hbase-cluster ^LocalHBaseCluster [{::keys [hbase-config]}]
-  (DefaultMetricsSystem/setMiniClusterMode true)
-  (let [hbase-cluster (doto (LocalHBaseCluster. (hbase-conf hbase-config))
-                        (.startup))]
-    hbase-cluster))
+  (let [hbase-conf (hbase-conf (:properties hbase-config))]
+    (DefaultMetricsSystem/setMiniClusterMode true)
+    (doto (LocalHBaseCluster. hbase-conf)
+      (.startup))))
 
 (defn start-embedded-hbase ^Closeable [options]
   (s/assert ::hbase-options options)

@@ -20,11 +20,13 @@
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-module* 'crux.kv.hbase/kv-store)
 
-(def hbase-opts {:io.kosong.crux.hbase.embedded/hbase-config {"hbase.tmp.dir"                          "./target/hbase/tmp"
-                                                              "hbase.rootdir"                          "./target/hbase"
-                                                              "hbase.master.info.port"                 "-1"
-                                                              "hbase.regionserver.info.port"           "-1"
-                                                              "hbase.unsafe.stream.capability.enforce" "false"}})
+(def hbase-opts {:io.kosong.crux.hbase.embedded/hbase-config
+                 {:properties {"hbase.tmp.dir"                          "./target/hbase/tmp"
+                               "hbase.rootdir"                          "./target/hbase"
+                               "hbase.master.info.port"                 "-1"
+                               "hbase.regionserver.info.port"           "-1"
+                               "hbase.unsafe.stream.capability.enforce" "false"}}})
+
 (def zk-opts {::ehb/zookeeper-port     2181
               ::ehb/zookeeper-data-dir "./target/zookeeper"})
 (defn with-silent-test-check [f]
@@ -42,10 +44,9 @@
 (defn- start-hbase-kv [connection namespace table family qualifier]
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
                                       ^bytes (Bytes/toBytesBinary table))
-        table      (.getTable connection table-name)
         family     (Bytes/toBytesBinary family)
         qualifier  (Bytes/toBytesBinary qualifier)]
-    (hbase-kv/->HBaseKvStore connection table family qualifier)))
+    (hbase-kv/->HBaseKvStore connection table-name family qualifier)))
 
 (defn with-kv-store [f]
   (with-open [conn (-> (HBaseConfiguration/create)
