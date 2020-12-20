@@ -44,10 +44,9 @@
 (defn- start-hbase-kv [connection namespace table family qualifier]
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
                                       ^bytes (Bytes/toBytesBinary table))
-        table      (.getTable connection table-name)
         family     (Bytes/toBytesBinary family)
         qualifier  (Bytes/toBytesBinary qualifier)]
-    (hbase-kv/->HBaseKvStore connection table family qualifier)))
+    (hbase-kv/->HBaseKvStore connection table-name family qualifier)))
 
 (defn with-kv-store [f]
   (with-open [conn (-> (HBaseConfiguration/create)

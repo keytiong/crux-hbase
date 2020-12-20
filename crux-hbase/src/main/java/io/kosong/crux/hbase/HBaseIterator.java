@@ -1,5 +1,6 @@
 package io.kosong.crux.hbase;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
 
 import java.io.Closeable;
@@ -8,6 +9,7 @@ import java.io.IOException;
 public class HBaseIterator implements Closeable {
 
     private final Table table;
+    private final TableName tableName;
 
     private ResultScanner forwardScanner;
     private ResultScanner backwardScanner;
@@ -17,10 +19,11 @@ public class HBaseIterator implements Closeable {
     private final byte[] family;
     private final byte[] qualifier;
 
-    public HBaseIterator(Table table, byte[] family, byte[] qualifier) {
-        this.table = table;
+    public HBaseIterator(Connection connection, TableName tableName, byte[] family, byte[] qualifier) throws IOException {
+        this.tableName = tableName;
         this.family = family;
         this.qualifier = qualifier;
+        this.table = connection.getTable(this.tableName);
     }
 
     public void seek(byte[] key) throws IOException {
@@ -63,6 +66,7 @@ public class HBaseIterator implements Closeable {
     public void close() throws IOException {
         invalidateBackwardScanner();;
         invalidateForwardScanner();
+        table.close();
     }
 
     private ResultScanner backwardScanner() throws IOException {

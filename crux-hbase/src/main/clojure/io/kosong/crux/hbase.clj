@@ -16,9 +16,6 @@
            (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.hbase.util Bytes)))
 
-
-(s/def ::connection #(instance? Connection %))
-
 (defn ensure-namespace [conn ns]
   (let [ns-descriptor (-> ns
                           (NamespaceDescriptor/create)
@@ -71,18 +68,19 @@
 ;;
 ;; KvSnapshot
 ;;
-(defrecord HBaseKvSnapshot [^Table table family qualifier]
+(defrecord HBaseKvSnapshot [^Connection connection ^TableName table-name family qualifier]
   kv/KvSnapshot
   (new-iterator [_]
-    (let [i (HBaseIterator. table family qualifier)]
+    (let [i (HBaseIterator. connection table-name family qualifier)]
       (->HBaseKvIterator i)))
 
   (get-value [_ k]
-    (let [g         (Get. (mem/->on-heap k))
-          ^Result r (.get table g)]
-      (some-> r
-              (.getValue family qualifier)
-              (mem/->off-heap))))
+    (with-open [table (.getTable connection table-name)]
+      (let [g         (Get. (mem/->on-heap k))
+            ^Result r (.get table g)]
+        (some-> r
+                (.getValue family qualifier)
+                (mem/->off-heap)))))
 
   Closeable
   (close [_]
@@ -99,45 +97,46 @@
 ;;
 ;; KvStore
 ;;
-(defrecord HBaseKvStore [^Connection connection ^Table table family qualifier]
+(defrecord HBaseKvStore [^Connection connection ^TableName table-name family qualifier]
   kv/KvStore
-  (store [this kvs]
-    (let [puts (LinkedList.)]
-      (doseq [[k v] kvs]
-        (.add puts (doto (Put. (mem/->on-heap k))
-                     (.addColumn family qualifier (mem/->on-heap v)))))
-      (.put table puts)))
+  (store [_ kvs]
+    (with-open [table (.getTable connection table-name)]
+      (let [puts (LinkedList.)]
+        (doseq [[k v] kvs]
+          (.add puts (doto (Put. (mem/->on-heap k))
+                       (.addColumn family qualifier (mem/->on-heap v)))))
+        (.put table puts))))
 
-  (new-snapshot [this]
-    (let [table-name (.getName table)
-          table      (.getTable connection table-name)]
-      (->HBaseKvSnapshot table family qualifier)))
+  (new-snapshot [_]
+    (->HBaseKvSnapshot connection table-name family qualifier))
 
-  (delete [this ks]
-    (let [deletes (LinkedList.)]
-      (doseq [k ks]
-        (.add deletes (Delete. (mem/->on-heap k))))
-      (.delete table deletes)))
+  (delete [_ ks]
+    (with-open [table (.getTable connection table-name)]
+      (let [deletes (LinkedList.)]
+        (doseq [k ks]
+          (.add deletes (Delete. (mem/->on-heap k))))
+        (.delete table deletes))))
 
-  (fsync [this]
+  (fsync [_]
     nil)
 
-  (compact [this]
+  (compact [_]
     nil)
 
-  (count-keys [this]
-    (let [scanner (.getScanner table (Scan.))]
-      (count-keys 0 scanner)))
+  (count-keys [_]
+    (with-open [table (.getTable connection table-name)]
+      (let [scanner (.getScanner table (Scan.))]
+        (count-keys 0 scanner))))
 
-  (db-dir [this]
-    (-> table (.getName) (.getNameAsString)))
+  (db-dir [_]
+    (.getNameAsString table-name))
 
   (kv-name [this]
     (.getName (class this)))
 
   Closeable
-  (close [this]
-    (.close table)))
+  (close [_]
+    nil))
 
 (defn start-hbase-connection [hbase-config]
   (ConnectionFactory/createConnection hbase-config))
@@ -146,10 +145,9 @@
   (ensure-table connection namespace table family)
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
                                       ^bytes (Bytes/toBytesBinary table))
-        table      (.getTable connection table-name)
         family     (Bytes/toBytesBinary family)
         qualifier  (Bytes/toBytesBinary qualifier)]
-    (->HBaseKvStore connection table family qualifier)))
+    (->HBaseKvStore connection table-name family qualifier)))
 
 (defn ->hbase-config {::sys/args {:properties {:doc      "HBase configuration properties"
                                                :require? false
