@@ -14,6 +14,7 @@
                          org.clojure/clojure                "1.10.1"
                          org.apache.hbase                   :hbase
                          juxt/crux-core                     :crux
+                         juxt/crux-kafka-embedded           :crux
                          io.kosong.crux/crux-hbase          :version
                          io.kosong.crux/crux-hbase-embedded :version}
             :subprocess nil})
