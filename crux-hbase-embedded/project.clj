@@ -1,4 +1,4 @@
-(defproject io.kosong.crux/crux-hbase-embedded "0.1.0-SNAPSHOT"
+(defproject io.kosong.crux/crux-hbase-embedded "0.1.0"
   :description "Embedded HBase for development and testing"
   :plugins [[lein-modules "0.3.11"]]
   :modules {:parent "../crux-hbase-parent"}
