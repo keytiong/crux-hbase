@@ -87,8 +87,8 @@
                                                  (t/is (= (inc i) (bytes->long (value *kv* (long->bytes i))))))
 
                                                (t/testing "deleting all keys in random order, including non existent keys"
-                                                 (kv/delete *kv* (for [i (shuffle (range (long (* number-of-entries 1.2))))]
-                                                                   (long->bytes i)))
+                                                 (kv/store *kv* (for [i (shuffle (range (long (* number-of-entries 1.2))))]
+                                                                   [(long->bytes i) nil]))
                                                  (doseq [i (range number-of-entries)]
                                                    (t/is (nil? (value *kv* (long->bytes i))))))))
 
@@ -137,10 +137,10 @@
                             (t/testing "store, retrieve and delete value"
                               (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
                               (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))
-                              (kv/delete *kv* [(long->bytes 1)])
+                              (kv/store *kv* [[(long->bytes 1) nil]])
                               (t/is (nil? (value *kv* (long->bytes 1))))
                               (t/testing "deleting non existing key is noop"
-                                (kv/delete *kv* [(long->bytes 1)]))))
+                                (kv/store *kv* [[(long->bytes 1) nil]]))))
 
 (t/deftest test-compact []
                         (t/testing "store, retrieve and delete value"
@@ -292,7 +292,7 @@
                                                                          (take-while identity)
                                                                          (vec)))))
                                               :fsync (kv/fsync *kv*)
-                                              :delete (kv/delete *kv* [(c/->value-buffer k)])
+                                              :delete (kv/store *kv* [[(c/->value-buffer k) nil]])
                                               :store (kv/store *kv*
                                                                [[(c/->value-buffer k)
                                                                  (c/->value-buffer v)]]))))
