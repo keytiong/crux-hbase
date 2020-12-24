@@ -1,13 +1,10 @@
 (ns io.kosong.crux.hbase
   (:require [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.lru :as lru]
-            [crux.document-store :as ds]
-            [crux.system :as sys]
-            [clojure.spec.alpha :as s])
+            [crux.system :as sys])
   (:import (io.kosong.crux.hbase HBaseIterator)
            (org.apache.hadoop.hbase TableName)
-           (org.apache.hadoop.hbase.client Put Delete Get Table Result ResultScanner Scan Connection)
+           (org.apache.hadoop.hbase.client Put Delete Get Result ResultScanner Scan Connection)
            (java.io Closeable)
            (java.util LinkedList)
            (org.apache.hadoop.hbase.util Bytes)
@@ -101,21 +98,20 @@
   kv/KvStore
   (store [_ kvs]
     (with-open [table (.getTable connection table-name)]
-      (let [puts (LinkedList.)]
+      (let [puts (LinkedList.)
+            deletes (LinkedList.)]
         (doseq [[k v] kvs]
-          (.add puts (doto (Put. (mem/->on-heap k))
-                       (.addColumn family qualifier (mem/->on-heap v)))))
-        (.put table puts))))
+          (if v
+            (.add puts (doto (Put. (mem/->on-heap k))
+                         (.addColumn family qualifier (mem/->on-heap v))))
+            (.add deletes (Delete. (mem/->on-heap k)))))
+        (when-not (.isEmpty puts)
+          (.put table puts))
+        (when-not (.isEmpty deletes)
+          (.delete table deletes)))))
 
   (new-snapshot [_]
     (->HBaseKvSnapshot connection table-name family qualifier))
-
-  (delete [_ ks]
-    (with-open [table (.getTable connection table-name)]
-      (let [deletes (LinkedList.)]
-        (doseq [k ks]
-          (.add deletes (Delete. (mem/->on-heap k))))
-        (.delete table deletes))))
 
   (fsync [_]
     nil)
