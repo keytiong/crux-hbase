@@ -7,6 +7,8 @@
             [clojure.java.io :as io])
   (:import crux.api.ICruxAPI))
 
+(defonce embedded-cluster nil)
+
 (def dev-node-dir
   (io/file "dev/dev-node"))
 
@@ -29,9 +31,8 @@
 (defmethod ig/halt-key! ::embedded-zookeeper [_ zk]
   (.close zk))
 
-(def config
+(def embedded-cluster-config
   {::embedded-zookeeper {:zk-data-dir (io/file dev-node-dir "zookeeper")
-
                          :zk-port     2181}
 
    ::embedded-hbase     {:deps         [(ig/ref ::embedded-zookeeper)]
@@ -41,27 +42,40 @@
                                                      "hbase.regionserver.info.port"                 "-1"
                                                      "hbase.master.start.timeout.localHBaseCluster" "60000"
                                                      "hbase.unsafe.stream.capability.enforce"       "false"
-                                                     "hbase.zookeeper.quorum"                       "127.0.0.1:2181"}}}
+                                                     "hbase.zookeeper.quorum"                       "127.0.0.1:2181"}}}})
 
-   ::crux               {:deps                [(ig/ref ::embedded-hbase)]
+(def crux-hbase-config
+  {::crux {:hbase-config        {:crux/module 'io.kosong.crux.hbase/->hbase-config
+                                 :properties  {"hbase.zookeeper.quorum" "127.0.0.1:2181"}}
 
-                         :hbase-config        {:crux/module 'io.kosong.crux.hbase/->hbase-config
-                                               :properties  {"hbase.zookeeper.quorum" "127.0.0.1:2181"}}
+           :hbase-connection    {:crux/module  'io.kosong.crux.hbase/->hbase-connection
+                                 :hbase-config :hbase-config}
 
-                         :hbase-connection    {:crux/module  'io.kosong.crux.hbase/->hbase-connection
-                                               :hbase-config :hbase-config}
+           :crux/index-store    {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                            :hbase-connection :hbase-connection
+                                            :table            "index-store"}}
+           :crux/document-store {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                            :hbase-connection :hbase-connection
+                                            :table            "document-store"}}
+           :crux/tx-log         {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                            :hbase-connection :hbase-connection
+                                            :table            "tx-log"}}}}
+  )
 
-                         :crux/index-store    {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                                          :hbase-connection :hbase-connection
-                                                          :table            "index-store"}}
-                         :crux/document-store {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                                          :hbase-connection :hbase-connection
-                                                          :table            "document-store"}}
-                         :crux/tx-log         {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                                          :hbase-connection :hbase-connection
-                                                          :table            "tx-log"}}}})
+(ir/set-prep! (fn [] crux-hbase-config))
 
-(ir/set-prep! (fn [] config))
+(defn start-embedded-cluster []
+  (alter-var-root #'embedded-cluster
+    (fn [cluster]
+      (if-not cluster
+        (ig/init embedded-cluster-config)
+        cluster))))
+
+(defn stop-embedded-cluster []
+  (alter-var-root #'embedded-cluster
+    (fn [cluster]
+      (when-not cluster
+        (ig/halt! cluster)))))
 
 (defn crux-node []
   (::crux system))
