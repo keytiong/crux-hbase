@@ -13,24 +13,24 @@
            (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.hbase.util Bytes)))
 
-(defn ensure-namespace [conn ns]
+(defn ensure-namespace [^Connection conn ^String ns]
   (let [ns-descriptor (-> ns
-                          (NamespaceDescriptor/create)
-                          (.build))
+                        (NamespaceDescriptor/create)
+                        (.build))
         admin         (.getAdmin conn)]
     (try
-      (.createNamespace admin ns-descriptor)
-      (catch NamespaceExistException e))))
+      (.createNamespace admin ^NamespaceDescriptor ns-descriptor)
+      (catch NamespaceExistException _))))
 
-(defn ensure-table [conn ^String ns ^String table ^String family]
+(defn ensure-table [^Connection conn ^String ns ^String table ^String family]
   (ensure-namespace conn ns)
   (let [table-name (TableName/valueOf (Bytes/toBytesBinary ns)
-                                      (Bytes/toBytesBinary table))
+                     (Bytes/toBytesBinary table))
         cf-desc    (-> (ColumnFamilyDescriptorBuilder/newBuilder (Bytes/toBytesBinary family))
-                       (.build))
+                     (.build))
         table-desc (-> (TableDescriptorBuilder/newBuilder table-name)
-                       (.setColumnFamily cf-desc)
-                       (.build))]
+                     (.setColumnFamily cf-desc)
+                     (.build))]
     (with-open [admin (.getAdmin conn)]
       (when-not (.tableExists admin table-name)
         (.createTable admin table-desc)))))
@@ -76,20 +76,12 @@
       (let [g         (Get. (mem/->on-heap k))
             ^Result r (.get table g)]
         (some-> r
-                (.getValue family qualifier)
-                (mem/->off-heap)))))
+          (.getValue family qualifier)
+          (mem/->off-heap)))))
 
   Closeable
   (close [_]
     nil))
-
-
-(defn- count-keys [i ^ResultScanner scanner]
-  (let [result (some-> scanner (.next))]
-    (if (or (nil? result)
-            (.isEmpty result))
-      i
-      (recur (inc i) scanner))))
 
 ;;
 ;; KvStore
@@ -98,7 +90,7 @@
   kv/KvStore
   (store [_ kvs]
     (with-open [table (.getTable connection table-name)]
-      (let [puts (LinkedList.)
+      (let [puts    (LinkedList.)
             deletes (LinkedList.)]
         (doseq [[k v] kvs]
           (if v
@@ -119,10 +111,15 @@
   (compact [_]
     nil)
 
+  ;;
+  ;; Naive implementation of HBase row count. It will take
+  ;; a LONG time in a large table
+  ;;
   (count-keys [_]
-    (with-open [table (.getTable connection table-name)]
-      (let [scanner (.getScanner table (Scan.))]
-        (count-keys 0 scanner))))
+    (with-open [table   (.getTable connection table-name)
+                scanner (.getScanner table (doto (Scan.)
+                                             (.setCaching 10000)))]
+      (count (seq scanner))))
 
   (db-dir [_]
     (.getNameAsString table-name))
@@ -140,7 +137,7 @@
 (defn- start-hbase-kv [connection namespace table family qualifier]
   (ensure-table connection namespace table family)
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
-                                      ^bytes (Bytes/toBytesBinary table))
+                     ^bytes (Bytes/toBytesBinary table))
         family     (Bytes/toBytesBinary family)
         qualifier  (Bytes/toBytesBinary qualifier)]
     (->HBaseKvStore connection table-name family qualifier)))
@@ -150,10 +147,10 @@
                                                :default  {}
                                                :spec     ::sys/string-map}}}
   [{:keys [properties]}]
-  (let [hadoop-conf (reduce-kv (fn [conf k v]
+  (let [hadoop-conf (reduce-kv (fn [^Configuration conf k v]
                                  (doto conf (.set k v)))
-                               (Configuration.)
-                               properties)]
+                      (Configuration.)
+                      properties)]
     (HBaseConfiguration/create hadoop-conf)))
 
 (defn ->hbase-connection {::sys/deps {:hbase-config {:crux.module '->hbase-config}}}
