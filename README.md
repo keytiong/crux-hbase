@@ -115,11 +115,18 @@ When in Clojure REPL `user` namespace
 ; Switch to dev namespace
 (dev)
 
-; Start embedded Zookeeper, HBase local cluster and Crux
+; If required, start embedded Zookeeper, HBase cluster
+; for local development
+(start-embedded-cluster)
+
+; Start Crux
 (go)
 
 (crux/status (crux-node))
 
-; Stop cluster
+; Stop Crux
 (halt)
+
+; Stop embeded Zookeeper, HBase cluster
+(stop-embedded-cluster)
 ```
