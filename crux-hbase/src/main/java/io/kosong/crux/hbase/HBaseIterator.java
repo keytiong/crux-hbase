@@ -2,22 +2,32 @@ package io.kosong.crux.hbase;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InterruptedIOException;
 
 public class HBaseIterator implements Closeable {
 
+    private static final Logger log = LoggerFactory.getLogger(HBaseIterator.class);
+
+    private static final int MIN_CACHE_SIZE = 32;
+    private static final int MAX_CACHE_SIZE = 16384;
+
     private final Table table;
     private final TableName tableName;
-
-    private ResultScanner forwardScanner;
-    private ResultScanner backwardScanner;
-
-    private Result cursor;
-
     private final byte[] family;
     private final byte[] qualifier;
+
+    private Result result;
+    private ResultScanner scanner;
+
+    private ScanDirection scanDirection = ScanDirection.NONE;
+    private int cacheSize = MIN_CACHE_SIZE;
+    private long accessCounter = 0;
+    private long lastAccess = 0;
 
     public HBaseIterator(Connection connection, TableName tableName, byte[] family, byte[] qualifier) throws IOException {
         this.tableName = tableName;
@@ -27,24 +37,60 @@ public class HBaseIterator implements Closeable {
     }
 
     public void seek(byte[] key) throws IOException {
-        invalidateBackwardScanner();
-        invalidateForwardScanner();
-        resetCursor(key);
+
+        // reset any open scanner
+        closeScanner();
+
+        initScanner(ScanDirection.FORWARD, MIN_CACHE_SIZE, key, true);
+
+        nextResult();
     }
 
     public void next() throws IOException {
-        invalidateBackwardScanner();
-        scannerNext(forwardScanner());
+
+        if (scanDirection != ScanDirection.FORWARD) {
+            initScanner(ScanDirection.FORWARD, MIN_CACHE_SIZE, key(), false);
+        }
+
+        try {
+            nextResult();
+        } catch (IOException e) {
+            log.warn("retrying next", e);
+            initScanner(ScanDirection.FORWARD, cacheSize, key(), false);
+            nextResult();
+        }
+
+        if (shouldIncreaseCacheSize()) {
+            closeScanner();
+            int newCacheSize = nextCacheSize(cacheSize);
+            initScanner(ScanDirection.FORWARD, newCacheSize, key(), false);
+        }
     }
 
     public void prev() throws IOException {
-        invalidateForwardScanner();
-        scannerNext(backwardScanner());
+
+        if (scanDirection != ScanDirection.BACKWARD) {
+            initScanner(ScanDirection.BACKWARD, MIN_CACHE_SIZE, key(), false);
+        }
+
+        try {
+            nextResult();
+        } catch (IOException e) {
+            log.warn("retry prev", e);
+            initScanner(ScanDirection.BACKWARD, cacheSize, key(), false);
+            nextResult();
+        }
+
+        if (shouldIncreaseCacheSize()) {
+            closeScanner();
+            int newCacheSize = nextCacheSize(cacheSize);
+            initScanner(ScanDirection.BACKWARD, newCacheSize, key(), false);
+        }
     }
 
     public byte[] key() {
         if (isValid()) {
-            return cursor.getRow();
+            return result.getRow();
         } else {
             return null;
         }
@@ -52,73 +98,84 @@ public class HBaseIterator implements Closeable {
 
     public byte[] value() {
         if (isValid()) {
-            return cursor.getValue(family, qualifier);
+            return result.getValue(family, qualifier);
         } else {
             return null;
         }
     }
 
     public boolean isValid() {
-        return cursor != null && ! cursor.isEmpty();
+        return result != null && !result.isEmpty();
     }
 
     @Override
     public void close() throws IOException {
-        invalidateBackwardScanner();;
-        invalidateForwardScanner();
         table.close();
     }
 
-    private ResultScanner backwardScanner() throws IOException {
-        if (backwardScanner == null) {
-            Scan scan = getScan(true);
-            backwardScanner = table.getScanner(scan);
-        }
-        return backwardScanner;
-    }
+    private void initScanner(ScanDirection direction, int cacheSize, byte[] startRow, boolean inclusive) throws IOException {
 
-    private ResultScanner forwardScanner() throws IOException {
-        if (forwardScanner == null) {
-            Scan scan = getScan(false);
-            forwardScanner = table.getScanner(scan);
+        Scan s = new Scan();
+        s.addColumn(family, qualifier);
+        s.setReadType(Scan.ReadType.STREAM);
+        s.setCaching(cacheSize);
+        s.readVersions(1);
+        if (direction == ScanDirection.FORWARD) {
+            s.setReversed(false);
+        } else if (direction == ScanDirection.BACKWARD) {
+            s.setReversed(true);
         }
-        return forwardScanner;
-    }
 
-    private Scan getScan(boolean isReversed) {
-        Scan scan = new Scan();
-        scan.setReversed(isReversed);
-        byte[] startRow = key();
         if (startRow != null) {
-            scan.withStartRow(startRow, false);
+            s.withStartRow(startRow, inclusive);
         }
-        scan.addColumn(family, qualifier);
-        return scan;
-    }
 
-    private void invalidateForwardScanner() {
-        if (forwardScanner != null) {
-            forwardScanner.close();
-            forwardScanner = null;
-        }
-    }
-
-    private void invalidateBackwardScanner() {
-        if (backwardScanner != null) {
-            backwardScanner.close();
-            backwardScanner = null;
+        try {
+            scanner = table.getScanner(s);
+            this.scanDirection = direction;
+            this.cacheSize = cacheSize;
+            this.accessCounter = 0;
+        } catch (IOException e) {
+            scanner = null;
+            this.scanDirection = ScanDirection.NONE;
+            this.cacheSize = MIN_CACHE_SIZE;
+            this.accessCounter = 0;
+            throw e;
         }
     }
 
-    private void scannerNext(ResultScanner scanner) throws IOException {
-        cursor = scanner.next();
+    private void nextResult() throws IOException {
+        try {
+            result = scanner.next();
+            lastAccess = System.currentTimeMillis();
+            accessCounter++;
+        } catch (InterruptedIOException e) {
+            log.warn("Error fetching next result", e);
+            closeScanner();
+            Thread.currentThread().interrupt();
+            throw e;
+        }
     }
 
-    private void resetCursor(byte [] key) throws IOException {
-        Scan scan = new Scan();
-        scan.withStartRow(key);
-        try (ResultScanner scanner = table.getScanner(scan)) {
-            cursor = scanner.next();
+    private void closeScanner() {
+        if (scanner != null) {
+            scanner.close();
+            scanner = null;
+            scanDirection = ScanDirection.NONE;
         }
+    }
+
+    private boolean shouldIncreaseCacheSize() {
+        return accessCounter < MAX_CACHE_SIZE && accessCounter >= cacheSize;
+    }
+
+    private int nextCacheSize(int currentCacheSize) {
+        return Math.min(MAX_CACHE_SIZE, currentCacheSize * 2);
+    }
+
+    enum ScanDirection {
+        NONE,
+        FORWARD,
+        BACKWARD
     }
 }
