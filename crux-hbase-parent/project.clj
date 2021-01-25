@@ -9,7 +9,7 @@
   :profiles {:provided  {:dependencies [[org.clojure/clojure]]}
              :inherited {:javac-options ["--release" "8"]}}
   :modules {:parent     nil
-            :versions   {:crux                              "20.12-1.13.0-beta"
+            :versions   {:crux                              "21.01-1.14.0-beta"
                          :hbase                             "2.3.3"
                          org.clojure/clojure                "1.10.1"
                          org.apache.hbase                   :hbase
