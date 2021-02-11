@@ -11,7 +11,8 @@
            (org.apache.hadoop.hbase.client Connection ConnectionFactory TableDescriptorBuilder ColumnFamilyDescriptorBuilder)
            (org.apache.hadoop.hbase HBaseConfiguration NamespaceDescriptor NamespaceExistException NamespaceExistException)
            (org.apache.hadoop.conf Configuration)
-           (org.apache.hadoop.hbase.util Bytes)))
+           (org.apache.hadoop.hbase.util Bytes)
+           (org.apache.hadoop.security UserGroupInformation)))
 
 (defn ensure-namespace [^Connection conn ^String ns]
   (let [ns-descriptor (-> ns
@@ -132,6 +133,8 @@
     nil))
 
 (defn start-hbase-connection [hbase-config]
+  (when-not (UserGroupInformation/isInitialized)
+    (UserGroupInformation/setConfiguration hbase-config))
   (ConnectionFactory/createConnection hbase-config))
 
 (defn- start-hbase-kv [connection namespace table family qualifier]
