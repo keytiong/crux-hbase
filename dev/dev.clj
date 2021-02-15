@@ -1,5 +1,6 @@
 (ns dev
   (:require [io.kosong.crux.hbase.embedded :as ehb]
+            [io.kosong.crux.hbase]
             [crux.api :as crux]
             [integrant.core :as ig]
             [integrant.repl.state :refer [system]]
@@ -31,6 +32,7 @@
 (defmethod ig/halt-key! ::embedded-zookeeper [_ zk]
   (.close zk))
 
+
 (def embedded-cluster-config
   {::embedded-zookeeper {:zk-data-dir (io/file dev-node-dir "zookeeper")
                          :zk-port     2181}
@@ -45,22 +47,30 @@
                                                      "hbase.zookeeper.quorum"                       "127.0.0.1:2181"}}}})
 
 (def crux-hbase-config
-  {::crux {:hbase-config        {:crux/module 'io.kosong.crux.hbase/->hbase-config
-                                 :properties  {"hbase.zookeeper.quorum" "127.0.0.1:2181"}}
+  {::crux    {:hbase-config            {:crux/module 'io.kosong.crux.hbase/->hbase-config
+                                        :properties  {"hbase.zookeeper.quorum" "127.0.0.1:2181"}}
 
-           :hbase-connection    {:crux/module  'io.kosong.crux.hbase/->hbase-connection
-                                 :hbase-config :hbase-config}
+              :curator                 {:crux/module      'io.kosong.crux.hbase/->curator
+                                        :zookeeper-quorum "127.0.0.1:2181"}
 
-           :crux/index-store    {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                            :hbase-connection :hbase-connection
-                                            :table            "index-store"}}
-           :crux/document-store {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                            :hbase-connection :hbase-connection
-                                            :table            "document-store"}}
-           :crux/tx-log         {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
-                                            :hbase-connection :hbase-connection
-                                            :table            "tx-log"}}}}
-  )
+              :hbase-connection        {:crux/module  'io.kosong.crux.hbase/->hbase-connection
+                                        :hbase-config :hbase-config}
+
+              :crux/index-store        {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                                   :hbase-connection :hbase-connection
+                                                   :table            "index-store"}}
+
+              :crux/document-store     {:kv-store {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                                   :hbase-connection :hbase-connection
+                                                   :table            "document-store"}}
+
+              :crux/tx-log             {:crux/module 'crux.kv.tx-log/->ingest-only-tx-log
+                                        :kv-store    {:crux/module      'io.kosong.crux.hbase/->kv-store
+                                                      :hbase-connection :hbase-connection
+                                                      :table            "tx-log"}}
+
+              :tx-ingest-executor {:crux/module 'io.kosong.crux.hbase/->tx-ingest-executor
+                                   :curator     :curator}}})
 
 (ir/set-prep! (fn [] crux-hbase-config))
 
