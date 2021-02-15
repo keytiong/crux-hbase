@@ -1,4 +1,4 @@
-(defproject io.kosong.crux/crux-hbase-dev "0.1.0-SNAPSHOT"
+(defproject io.kosong.crux/crux-hbase-dev "0.2.0-SNAPSHOT"
   :description "Crux KV implementation with HBase"
   :url "https://github.com/keytiong/crux-hbase"
   :license {:name "The MIT License"
@@ -7,7 +7,10 @@
             [nrepl/lein-nrepl "0.3.2"]]
   :packaging "pom"
 
-  :source-paths ^:replace ["dev"]
+  :source-paths ^:replace ["dev"
+                           "crux-hbase/src/main/clojure"
+                           "crux-hbase-embedded/src/main/clojure"
+                           "crux-hbase-test/src/main/clojure"]
 
   :resource-paths ^:replace ["dev-resources"]
 

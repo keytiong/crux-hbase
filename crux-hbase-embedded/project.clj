@@ -8,7 +8,10 @@
   :test-paths ^:replace ["src/test/clojure"]
   :dependencies [[org.apache.hbase/hbase-client _ :exclusions [com.google.guava/guava
                                                                io.netty/netty
-                                                               net.minidev/json-smart]]
+                                                               net.minidev/json-smart
+                                                               org.apache.curator/curator-client
+                                                               org.apache.curator/curator-framework
+                                                               org.apache.curator/curator-recipes]]
                  [org.apache.hbase/hbase-server _ :exclusions [com.google.guava/guava
                                                                io.netty/netty
                                                                org.glassfish/javax.el

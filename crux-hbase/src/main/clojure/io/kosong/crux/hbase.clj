@@ -1,18 +1,25 @@
 (ns io.kosong.crux.hbase
-  (:require [crux.kv :as kv]
+  (:require [crux.tx :as tx]
+            [crux.db :as db]
+            [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx.event :as txe]
+            [clojure.tools.logging :as log])
   (:import (io.kosong.crux.hbase HBaseIterator)
            (org.apache.hadoop.hbase TableName)
-           (org.apache.hadoop.hbase.client Put Delete Get Result ResultScanner Scan Connection)
+           (org.apache.hadoop.hbase.client Put Delete Get Result Scan Connection)
            (java.io Closeable)
-           (java.util LinkedList)
+           (java.util LinkedList UUID)
            (org.apache.hadoop.hbase.util Bytes)
            (org.apache.hadoop.hbase.client Connection ConnectionFactory TableDescriptorBuilder ColumnFamilyDescriptorBuilder)
            (org.apache.hadoop.hbase HBaseConfiguration NamespaceDescriptor NamespaceExistException NamespaceExistException)
            (org.apache.hadoop.conf Configuration)
            (org.apache.hadoop.hbase.util Bytes)
-           (org.apache.hadoop.security UserGroupInformation)))
+           (org.apache.hadoop.security UserGroupInformation)
+           (org.apache.curator.framework CuratorFrameworkFactory)
+           (org.apache.curator.retry ExponentialBackoffRetry)
+           (org.apache.curator.framework.recipes.leader LeaderSelector LeaderSelectorListener LeaderSelectorListenerAdapter)))
 
 (defn ensure-namespace [^Connection conn ^String ns]
   (let [ns-descriptor (-> ns
@@ -185,3 +192,98 @@
     (when create-table?
       (ensure-table hbase-connection namespace table family))
     (start-hbase-kv hbase-connection namespace table family qualifier)))
+
+(defn ->curator
+  {::sys/args {:zookeeper-quorum   {:doc       "Zookeeper connection string"
+                                    :required? true
+                                    :spec      ::sys/string}
+               :session-timeout    {:doc       "Session timeout in milliseconds"
+                                    :required? false
+                                    :default   60000
+                                    :spec      ::sys/int}
+               :connection-timeout {:doc       "Connection timeout in milliseconds"
+                                    :required? false
+                                    :default   60000
+                                    :spec      ::sys/int}
+               :retry-base-sleep   {:doc      "Exponential backoff retry base sleep time in milliseconds"
+                                    :require? false
+                                    :default  2000
+                                    :spec     ::sys/int}
+               :retry-max-count    {:doc       "Exponential backoff retry maximum count"
+                                    :required? false
+                                    :default   10
+                                    :spec      ::sys/int}}}
+  [{:keys [zookeeper-quorum session-timeout connection-timeout retry-base-sleep retry-max-count]}]
+  (doto (CuratorFrameworkFactory/newClient zookeeper-quorum
+          session-timeout
+          connection-timeout
+          (ExponentialBackoffRetry. retry-base-sleep retry-max-count))
+    (.start)))
+
+;;
+;; Based on ingest-tx function in https://github.com/juxt/crux/blob/master/crux-core/src/crux/kv/tx_log.clj
+;;
+(defn- ingest-tx [tx-ingester tx tx-events]
+  (let [in-flight-tx (db/begin-tx tx-ingester tx nil)]
+    (if (db/index-tx-events in-flight-tx tx-events)
+      (db/commit in-flight-tx)
+      (db/abort in-flight-tx))))
+
+;;
+;; Based on ->tx-log function in https://github.com/juxt/crux/blob/master/crux-core/src/crux/kv/tx_log.clj
+;;
+(defn- run-tx-ingest-executor [tx-ingester tx-log index-store]
+  (try
+    (while :true
+      (let [latest-submitted-tx-id (::tx/tx-id (db/latest-submitted-tx tx-log))
+            latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx index-store))]
+        (with-open [txs (db/open-tx-log tx-log latest-completed-tx-id)]
+          (doseq [tx (iterator-seq txs)
+                  :while (<= (::tx/tx-id tx) (or latest-submitted-tx-id 0))]
+            (ingest-tx tx-ingester
+              (select-keys tx [::tx/tx-id ::tx/tx-time])
+              (::txe/tx-events tx)))))
+      (Thread/sleep 100))
+    (catch InterruptedException _
+      (Thread/interrupted)
+      (log/info "tx-ingest-executor interrupted"))))
+
+(defrecord TxIngestExecutor [leader-selector]
+  Closeable
+  (close [_]
+    (if (.hasLeadership leader-selector)
+      (do (.interruptLeadership leader-selector)
+          (Thread/sleep 1000)
+          (.close leader-selector))
+      (.close leader-selector))))
+
+(defn- tx-ingest-executor-thread [tx-ingester tx-log index-store]
+  (let [runnable #(run-tx-ingest-executor tx-ingester
+                    tx-log index-store)]
+    (Thread. ^Runnable runnable "tx-ingest-executor")))
+
+(defn ->tx-ingest-executor
+  {::sys/deps {:index-store :crux/index-store
+               :tx-log      :crux/tx-log
+               :tx-ingester :crux/tx-ingester
+               :curator     :curator}
+   ::sys/args {:mutex-path {:doc      "Zookeeper leader mutex path"
+                            :require? false
+                            :default  "/crux/tx-ingest-executor"}}}
+  [{:keys [index-store tx-log tx-ingester curator mutex-path]}]
+  (let [leader-listener (proxy [LeaderSelectorListenerAdapter] []
+                          (takeLeadership [_]
+                            (log/info "Taking tx-ingest-executor leadership")
+                            (let [executor (tx-ingest-executor-thread tx-ingester
+                                             tx-log index-store)]
+                              (try
+                                (.start executor)
+                                (.join executor)
+                                (catch InterruptedException _
+                                  (.interrupt executor)
+                                  (.join executor))))))
+        leader-selector (doto (LeaderSelector. curator mutex-path leader-listener)
+                          (.setId (str (UUID/randomUUID)))
+                          (.autoRequeue)
+                          (.start))]
+    (->TxIngestExecutor leader-selector)))
