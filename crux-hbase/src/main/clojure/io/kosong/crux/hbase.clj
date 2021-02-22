@@ -145,7 +145,6 @@
   (ConnectionFactory/createConnection hbase-config))
 
 (defn- start-hbase-kv [connection namespace table family qualifier]
-  (ensure-table connection namespace table family)
   (let [table-name (TableName/valueOf ^bytes (Bytes/toBytesBinary namespace)
                      ^bytes (Bytes/toBytesBinary table))
         family     (Bytes/toBytesBinary family)
