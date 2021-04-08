@@ -1,4 +1,4 @@
-(defproject io.kosong.crux/crux-hbase-parent "0.2.0-SNAPSHOT"
+(defproject io.kosong.crux/crux-hbase-parent "0.2.0"
   :description "Crux KV implementation with HBase"
   :url "https://github.com/keytiong/crux-hbase"
   :license {:name "The MIT License"
