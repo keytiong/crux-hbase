@@ -1,4 +1,4 @@
-(defproject io.kosong.crux/crux-hbase "0.3.0-SNAPSHOT"
+(defproject io.kosong.crux/crux-hbase "0.3.0"
   :description "Crux HBase"
   :url "https://github.com/keytiong/crux-hbase"
   :license {:name "The MIT License"
