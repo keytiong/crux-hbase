@@ -1,4 +1,4 @@
-(defproject io.kosong.crux/crux-hbase-parent "0.2.0"
+(defproject io.kosong.crux/crux-hbase-parent "0.3.0"
   :description "Crux KV implementation with HBase"
   :url "https://github.com/keytiong/crux-hbase"
   :license {:name "The MIT License"
@@ -9,7 +9,7 @@
   :profiles {:provided  {:dependencies [[org.clojure/clojure]]}
              :inherited {:javac-options ["--release" "8"]}}
   :modules {:parent     nil
-            :versions   {:crux                              "21.02-1.15.0-beta"
+            :versions   {:crux                              "21.04-1.16.0-beta"
                          :hbase                             "2.3.3"
                          org.clojure/clojure                "1.10.1"
                          org.apache.hbase                   :hbase
