@@ -12,13 +12,13 @@ requiring local index store.
 <dependency>
   <groupId>io.kosong.crux</groupId>
   <artifactId>crux-hbase</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0-SNAPSHOT</version>
 </dependency>
 
 ```
 ### Leiningen
 ```clojure
-[io.kosong.crux.hbase/crux-hbase "0.3.0"]
+[io.kosong.crux.hbase/crux-hbase "0.4.0-SNAPSHOT"]
 ```
 
 
